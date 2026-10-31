@@ -1,0 +1,24 @@
+# Run this file on its own; the existing host Caddy owns ports 80/443.
+name: aire-front
+services:
+  front:
+    build: .
+    image: aire-front:0.1.0
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      AIRE_MODE: live
+      AIRE_APP_ORIGIN: https://${AIRE_DOMAIN:-aire.northeia.com}
+      AIRE_DATA_DIR: /data
+    ports:
+      - "127.0.0.1:3001:3000"
+    volumes:
+      - aire-data:/data
+    networks: [aire]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    mem_limit: 768m
+volumes:
+  aire-data:
+networks:
+  aire:
