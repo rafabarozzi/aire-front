@@ -3,6 +3,7 @@ export const permissions = [
   "journeys:create",
   "artifacts:read",
   "connections:read",
+  "connections:manage",
   "access:manage",
 ] as const;
 export type Permission = (typeof permissions)[number];
@@ -48,6 +49,18 @@ export type Repository = {
   revision: string;
   private: boolean;
   demo?: boolean;
+};
+export type ConnectionsView = {
+  revision: number;
+  repositories: string[];
+  githubConfigured: boolean;
+  credential: {
+    label: string;
+    source: "panel" | "environment";
+    updatedAt?: string;
+  } | null;
+  engineConfigured: boolean;
+  groups: number;
 };
 export type JourneyInput = {
   name: string;

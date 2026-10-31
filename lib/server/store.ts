@@ -10,11 +10,12 @@ import { join } from "node:path";
 import { AppError } from "./config.ts";
 import { defaultPolicy, type Journey, type RolePolicy } from "../aire/types.ts";
 import { policySchema } from "../aire/validation.ts";
-function root(tenant: string) {
+export function tenantDirectory(tenant: string) {
   if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(tenant))
     throw new Error("Invalid tenant");
   return join(process.env.AIRE_DATA_DIR || "/data", tenant);
 }
+const root = tenantDirectory;
 function jobPath(tenant: string, id: string) {
   if (!/^[0-9a-f-]{36}$/.test(id))
     throw new AppError(404, "not_found", "Análise não encontrada.");
@@ -56,9 +57,13 @@ export async function listJourneys(tenant: string): Promise<Journey[]> {
 }
 export async function readPolicy(tenant: string): Promise<RolePolicy> {
   try {
-    return policySchema.parse(
-      JSON.parse(await readFile(join(root(tenant), "policy.json"), "utf8")),
+    const raw = JSON.parse(
+      await readFile(join(root(tenant), "policy.json"), "utf8"),
     );
+    // Preserve existing grants and add the new mandatory permission only to admin.
+    if (Array.isArray(raw?.admin) && !raw.admin.includes("connections:manage"))
+      raw.admin.push("connections:manage");
+    return policySchema.parse(raw);
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT")
       return structuredClone(defaultPolicy);

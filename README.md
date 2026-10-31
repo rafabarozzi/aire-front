@@ -17,6 +17,7 @@ Abra `http://localhost:3000`. O modo de demonstração é explícito, usa apenas
 
 - Lista de jornadas, busca, filtros Gold/Silver/Bronze e ordenação.
 - Assistente: validar repositório/revisão, definir jornada e revisar antes de enviar.
+- Conexões: cadastrar, editar, excluir e validar repositórios; gerenciar uma credencial GitHub criptografada por workspace, com permissão específica e instruções de recuperação. Veja [o guia de conexões](docs/github-connection.md).
 - BFF: valida a lista de repositórios da organização, fixa o SHA, baixa snapshot limitado a 50 MB, cria a análise e envia o ZIP à API v1 do motor.
 - Consulta de estado, incluindo `AWAITING_NARRATION`. Esta versão não substitui o n8n nem executa a narração.
 - Visualização do manifesto real v1 com serviços, recursos, dependências direcionadas/condicionais e evidências. O desenho limita-se a 24 elementos e explicita o limite; o artefato original permanece completo.

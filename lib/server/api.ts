@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { AppError } from "./config.ts";
 import { checkOrigin, context, cookie, SESSION_COOKIE } from "./session.ts";
+import { connectionsApi } from "./connections-api.ts";
 import {
   getJourney,
   listJourneys,
@@ -68,8 +69,17 @@ export async function api(request: Request, path: string[]) {
       path.join("/") === "repositories/validate" &&
       request.method === "POST"
     ) {
-      const c = await context(request, "journeys:create"),
-        b = await body(request);
+      const c = await context(request);
+      if (
+        !c.permissions.includes("journeys:create") &&
+        !c.permissions.includes("connections:manage")
+      )
+        throw new AppError(
+          403,
+          "forbidden",
+          "Seu perfil não permite validar repositórios.",
+        );
+      const b = await body(request);
       if (
         typeof b.repository !== "string" ||
         (b.ref && typeof b.ref !== "string")
@@ -105,18 +115,8 @@ export async function api(request: Request, path: string[]) {
         return json({ policy: result.data });
       }
     }
-    if (path[0] === "connections" && request.method === "GET") {
-      const c = await context(request, "connections:read");
-      return json({
-        repositories: c.tenant.repositories,
-        githubConfigured: Boolean(process.env[c.tenant.githubTokenEnv]),
-        engineConfigured: Boolean(
-          process.env[c.tenant.engineUrlEnv] &&
-          process.env[c.tenant.engineTokenEnv],
-        ),
-        groups: c.tenant.groups.length,
-      });
-    }
+    if (path[0] === "connections")
+      return json(await connectionsApi(request, path, () => body(request)));
     if (path[0] === "journeys" && path.length === 1) {
       if (request.method === "GET") {
         const c = await context(request, "journeys:read");

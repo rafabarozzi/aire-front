@@ -423,3 +423,117 @@ test("upstream failures never disclose provider bodies or tokens", async () => {
   assert.equal(r.status, 502);
   assert.doesNotMatch(await r.text(), /synthetic-token|secret/);
 });
+
+type RecoveryError = { code: string; setup?: { githubTokenEnv: string } };
+test("missing GitHub credential is actionable and never exposes configuration or calls the provider", async () => {
+  delete process.env.TEST_GITHUB;
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    throw new Error("No provider call expected");
+  };
+  let r = await api(
+    await req("repositories/validate", "alice", "POST", {
+      repository: "org/commerce",
+    }),
+    ["repositories", "validate"],
+  );
+  assert.equal(r.status, 503);
+  const adminError = (await r.json()) as RecoveryError;
+  assert.equal(adminError.code, "github_unconfigured");
+  assert.equal("setup" in adminError, false);
+  const configured = JSON.parse(JSON.stringify(ts));
+  configured[0].members[0].role = "engineer";
+  process.env.AIRE_TENANTS_JSON = JSON.stringify(configured);
+  r = await api(
+    await req("repositories/validate", "alice", "POST", {
+      repository: "org/commerce",
+    }),
+    ["repositories", "validate"],
+  );
+  const deniedSetup = (await r.json()) as RecoveryError;
+  assert.equal(deniedSetup.code, "github_unconfigured");
+  assert.equal("setup" in deniedSetup, false);
+  r = await api(
+    await req("repositories/validate", "alice", "POST", {
+      repository: "other/private",
+    }),
+    ["repositories", "validate"],
+  );
+  const deniedRepo = (await r.json()) as RecoveryError;
+  assert.equal(deniedRepo.code, "repository_not_allowed");
+  assert.equal("setup" in deniedRepo, false);
+  assert.equal(calls, 0);
+});
+
+test("GitHub failures distinguish authentication, SSO, policy, limits and availability without reflecting upstream secrets", async () => {
+  for (const [status, headers, expectedStatus, code] of [
+    [401, {}, 502, "github_credentials"],
+    [
+      403,
+      { "x-github-sso": "required; url=https://example.test/synthetic-secret" },
+      403,
+      "github_sso",
+    ],
+    [403, {}, 403, "github_forbidden"],
+    [403, { "x-ratelimit-remaining": "0" }, 429, "github_rate_limited"],
+    [403, { "retry-after": "60" }, 429, "github_rate_limited"],
+    [429, {}, 429, "github_rate_limited"],
+    [404, {}, 404, "repository_unavailable"],
+    [503, {}, 502, "github_unavailable"],
+  ] as [number, Record<string, string>, number, string][]) {
+    globalThis.fetch = async () =>
+      new Response("synthetic-secret", { status, headers });
+    const r = await api(
+      await req("repositories/validate", "alice", "POST", {
+        repository: "org/commerce",
+      }),
+      ["repositories", "validate"],
+    );
+    assert.equal(r.status, expectedStatus);
+    const body = (await r.json()) as RecoveryError;
+    assert.equal(body.code, code);
+    assert.doesNotMatch(
+      JSON.stringify(body),
+      /synthetic-secret|synthetic-github-token/,
+    );
+  }
+});
+
+test("repository metadata success followed by missing commit identifies the revision step", async () => {
+  let calls = 0;
+  globalThis.fetch = async (input) => {
+    calls++;
+    if (String(input).endsWith("/repos/org/commerce"))
+      return Response.json({ default_branch: "main", private: true });
+    assert.ok(String(input).endsWith("/commits/does-not-exist"));
+    return new Response(null, { status: 404 });
+  };
+  const r = await api(
+    await req("repositories/validate", "alice", "POST", {
+      repository: "org/commerce",
+      ref: "does-not-exist",
+    }),
+    ["repositories", "validate"],
+  );
+  assert.equal(r.status, 404);
+  assert.equal(
+    ((await r.json()) as RecoveryError).code,
+    "revision_unavailable",
+  );
+  assert.equal(calls, 2);
+});
+
+test("GitHub network failures do not claim that credentials are invalid", async () => {
+  globalThis.fetch = async () => {
+    throw new Error("network synthetic-secret");
+  };
+  const r = await api(
+    await req("repositories/validate", "alice", "POST", {
+      repository: "org/commerce",
+    }),
+    ["repositories", "validate"],
+  );
+  assert.equal(r.status, 502);
+  assert.equal(((await r.json()) as RecoveryError).code, "github_unavailable");
+});

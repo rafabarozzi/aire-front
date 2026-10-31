@@ -2,6 +2,7 @@ import { z } from "zod";
 import { AppError, allowedRepository, type Tenant } from "./config.ts";
 import { normalizeRepository } from "../aire/validation.ts";
 import type { Repository } from "../aire/types.ts";
+import { githubCredential, authorizedRepositories } from "./connections.ts";
 export async function boundedBody(
   response: Response,
   maxBytes: number,
@@ -41,25 +42,39 @@ export async function boundedBody(
   }
   return bytes;
 }
-async function github(tenant: Tenant, path: string, raw = false) {
-  const token = process.env[tenant.githubTokenEnv];
+async function github(
+  tenant: Tenant,
+  path: string,
+  raw = false,
+  missing = "repository_unavailable",
+) {
+  const token = await githubCredential(tenant);
   if (!token)
     throw new AppError(
       503,
       "github_unconfigured",
-      "A credencial do GitHub não foi configurada no servidor para esta organização.",
+      "A credencial do GitHub não foi cadastrada para esta organização.",
     );
-  const response = await fetch("https://api.github.com" + path, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-      "User-Agent": "AIRE-Console",
-    },
-    redirect: raw ? "manual" : "error",
-    signal: AbortSignal.timeout(25000),
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch("https://api.github.com" + path, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "AIRE-Console",
+      },
+      redirect: raw ? "manual" : "error",
+      signal: AbortSignal.timeout(25000),
+      cache: "no-store",
+    });
+  } catch {
+    throw new AppError(
+      502,
+      "github_unavailable",
+      "Não foi possível alcançar o GitHub. Tente novamente em instantes.",
+    );
+  }
   if (raw && response.status === 302) {
     const location = new URL(response.headers.get("location") || "");
     if (
@@ -86,14 +101,53 @@ async function github(tenant: Tenant, path: string, raw = false) {
       );
     return zip;
   }
-  if (!response.ok)
+  if (!response.ok) {
+    if (response.status === 401)
+      throw new AppError(
+        502,
+        "github_credentials",
+        "O GitHub não aceitou a credencial configurada para este workspace.",
+      );
+    if (
+      response.status === 429 ||
+      (response.status === 403 &&
+        (response.headers.get("x-ratelimit-remaining") === "0" ||
+          response.headers.has("retry-after")))
+    )
+      throw new AppError(
+        429,
+        "github_rate_limited",
+        "O GitHub limitou temporariamente as consultas desta credencial.",
+      );
+    if (
+      response.status === 403 &&
+      response.headers.get("x-github-sso")?.startsWith("required")
+    )
+      throw new AppError(
+        403,
+        "github_sso",
+        "O GitHub exige autorização SSO para esta credencial.",
+      );
+    if (response.status === 403)
+      throw new AppError(
+        403,
+        "github_forbidden",
+        "O GitHub recusou o acesso ao repositório.",
+      );
+    if (response.status === 404)
+      throw new AppError(
+        404,
+        missing,
+        missing === "revision_unavailable"
+          ? "A branch ou o commit não foi encontrado ou não está acessível à credencial."
+          : "O repositório não foi encontrado ou não está acessível à credencial.",
+      );
     throw new AppError(
-      response.status === 404 ? 404 : response.status === 403 ? 403 : 502,
-      "github_access",
-      response.status === 404
-        ? "Repositório ou revisão não encontrados. Confira o nome e o acesso da credencial."
-        : "O GitHub recusou a consulta. Confira a permissão Contents: read e a autorização SSO da organização.",
+      502,
+      "github_unavailable",
+      "O GitHub não concluiu a consulta. Tente novamente em instantes.",
     );
+  }
   return response;
 }
 export async function validateRepository(
@@ -111,7 +165,10 @@ export async function validateRepository(
       "Use uma URL HTTPS do GitHub ou organização/repositório.",
     );
   }
-  allowedRepository(tenant, repository);
+  allowedRepository(
+    { ...tenant, repositories: await authorizedRepositories(tenant) },
+    repository,
+  );
   const info = z
     .object({ default_branch: z.string(), private: z.boolean() })
     .parse(await (await github(tenant, `/repos/${repository}`)).json());
@@ -125,6 +182,8 @@ export async function validateRepository(
         await github(
           tenant,
           `/repos/${repository}/commits/${encodeURIComponent(branch)}`,
+          false,
+          "revision_unavailable",
         )
       ).json(),
     );
@@ -146,7 +205,10 @@ export async function snapshot(
   repository: string,
   revision: string,
 ) {
-  allowedRepository(tenant, repository);
+  allowedRepository(
+    { ...tenant, repositories: await authorizedRepositories(tenant) },
+    repository,
+  );
   return boundedBody(
     await github(tenant, `/repos/${repository}/zipball/${revision}`, true),
     50 * 1024 * 1024,

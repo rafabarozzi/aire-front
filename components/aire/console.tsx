@@ -44,6 +44,9 @@ import {
   LogOut,
   Monitor,
   Eye,
+  Pencil,
+  Trash2,
+  KeyRound,
 } from "lucide-react";
 import {
   defaultPolicy,
@@ -56,6 +59,7 @@ import {
   type RolePolicy,
   type Role,
   type Permission,
+  type ConnectionsView,
 } from "@/lib/aire/types";
 import {
   demoJourneys,
@@ -66,23 +70,8 @@ import {
 } from "@/lib/aire/demo";
 import { CanonicalMap } from "./canonical-map";
 import { normalizeRepository, journeyInputSchema } from "@/lib/aire/validation";
-
-export async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch("/api/console/" + path, {
-    ...init,
-    credentials: "same-origin",
-    headers: { "Content-Type": "application/json", ...init?.headers },
-  });
-  if (!response.ok) {
-    const data = (await response.json().catch(() => ({}))) as {
-      error?: string;
-    };
-    throw new Error(
-      data.error || "Não foi possível concluir. Tente novamente.",
-    );
-  }
-  return response.json();
-}
+import { ApiError, request } from "@/lib/aire/client";
+import { connectionRecovery } from "@/lib/aire/connection-recovery";
 export function download(
   name: string,
   contents: string,
@@ -100,6 +89,7 @@ const permissionLabels: Record<Permission, string> = {
   "journeys:create": "Mapear jornadas",
   "artifacts:read": "Exportar artefatos",
   "connections:read": "Visualizar conexões",
+  "connections:manage": "Gerenciar repositórios e credenciais",
   "access:manage": "Administrar acessos",
 };
 const roleLabels: Record<Role, string> = {
@@ -163,6 +153,7 @@ export function Console() {
     [search, setSearch] = useState(""),
     [tier, setTier] = useState("Todas"),
     [sort, setSort] = useState("recent");
+  const [mappingDraft, setMappingDraft] = useState({ repository: "", ref: "" });
   const [notifications, setNotifications] = useState(false),
     [loginPreview, setLoginPreview] = useState(false);
   const demo = session?.mode === "demo";
@@ -352,7 +343,7 @@ export function Console() {
               onClick={() => navigate("jornadas")}
             />
           )}
-          {can("connections:read") && (
+          {(can("connections:read") || can("connections:manage")) && (
             <Nav
               icon={<Link2 />}
               label="Conexões"
@@ -504,7 +495,10 @@ export function Console() {
             <Connections
               demo={demo}
               session={session}
-              onMap={() => setWizard(true)}
+              onMap={(repository) => {
+                setMappingDraft({ repository: repository || "", ref: "" });
+                setWizard(true);
+              }}
               canMap={can("journeys:create")}
             />
           ) : page === "acessos" ? (
@@ -962,6 +956,17 @@ export function Console() {
       </div>
       {wizard && (
         <Wizard
+          initialRepository={mappingDraft.repository}
+          initialRef={mappingDraft.ref}
+          onManage={
+            can("connections:manage")
+              ? (repository, ref) => {
+                  setMappingDraft({ repository, ref });
+                  setWizard(false);
+                  setPage("conexoes");
+                }
+              : undefined
+          }
           demo={demo}
           close={() => setWizard(false)}
           created={(j) => {
@@ -1101,13 +1106,15 @@ function Modal({
   wide?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(close);
+  closeRef.current = close;
   useEffect(() => {
     const previous = document.activeElement as HTMLElement;
     const old = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     ref.current?.focus();
     function handle(e: KeyboardEvent) {
-      if (e.key === "Escape") close();
+      if (e.key === "Escape") closeRef.current();
       if (e.key === "Tab") {
         const nodes = ref.current?.querySelectorAll<HTMLElement>(
           'button:not(:disabled),input,select,textarea,a[href],[tabindex="0"]',
@@ -1134,7 +1141,7 @@ function Modal({
       document.removeEventListener("keydown", handle);
       previous?.focus();
     };
-  }, [close]);
+  }, []);
   return (
     <div
       className="modal-backdrop"
@@ -1162,6 +1169,9 @@ function Modal({
   );
 }
 function Wizard({
+  initialRepository,
+  initialRef,
+  onManage,
   demo,
   close,
   created,
@@ -1169,24 +1179,40 @@ function Wizard({
   demo: boolean;
   close: () => void;
   created: (j: Journey) => void;
+  initialRepository: string;
+  initialRef: string;
+  onManage?: (repository: string, ref: string) => void;
 }) {
   const [step, setStep] = useState(1),
     [repo, setRepo] = useState(
-      demo ? "https://github.com/northeia-lab/commerce-demo" : "",
+      demo
+        ? "https://github.com/northeia-lab/commerce-demo"
+        : initialRepository,
     ),
-    [ref, setRef] = useState(""),
+    [ref, setRef] = useState(initialRef),
     [connection, setConnection] = useState<Repository | null>(null),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [errorCode, setErrorCode] = useState("");
   const [name, setName] = useState(""),
     [tier, setTier] = useState<Tier>("Gold"),
     [endpoint, setEndpoint] = useState(""),
     [subdir, setSubdir] = useState("");
   async function validate() {
     setError("");
+    setErrorCode("");
+    setConnection(null);
     setBusy(true);
     try {
-      const normalized = normalizeRepository(repo);
+      let normalized: string;
+      try {
+        normalized = normalizeRepository(repo);
+      } catch {
+        throw new ApiError(
+          "Informe uma URL de repositório GitHub válida.",
+          "repository_format",
+        );
+      }
       if (demo) {
         if (normalized !== "northeia-lab/commerce-demo")
           throw new Error(
@@ -1211,6 +1237,7 @@ function Wizard({
         );
     } catch (e) {
       setError((e as Error).message);
+      setErrorCode(e instanceof ApiError ? e.code : "service_error");
     } finally {
       setBusy(false);
     }
@@ -1302,6 +1329,7 @@ function Wizard({
               Repositório GitHub
               <input
                 autoComplete="off"
+                disabled={busy}
                 value={repo}
                 onChange={(e) => {
                   setRepo(e.target.value);
@@ -1316,9 +1344,11 @@ function Wizard({
               Branch ou commit <span className="optional">opcional</span>
               <input
                 value={ref}
+                disabled={busy}
                 onChange={(e) => {
                   setRef(e.target.value);
                   setConnection(null);
+                  setError("");
                 }}
                 placeholder="Branch padrão do repositório"
               />
@@ -1358,8 +1388,8 @@ function Wizard({
             <div className="form-note">
               <LockKeyhole size={16} />
               <p>
-                O acesso usa a credencial da organização no servidor. Chaves e
-                tokens nunca são solicitados neste formulário.
+                O acesso usa a credencial da sua organização, gerenciada na tela
+                Conexões.
               </p>
             </div>
           </>
@@ -1476,16 +1506,16 @@ function Wizard({
             <CircleAlert size={18} />
             <div>
               <strong>{error}</strong>
-              {step === 1 && (
-                <ol>
-                  <li>Confirme o nome e a revisão do repositório.</li>
-                  <li>Libere o repositório para esta organização no AIRE.</li>
-                  <li>Conceda Contents: read à credencial do GitHub.</li>
-                  <li>Autorize o SSO da organização, se exigido.</li>
-                </ol>
-              )}
             </div>
           </div>
+        )}
+        {error && step === 1 && !demo && (
+          <ConnectionInstructions
+            code={errorCode}
+            onManage={onManage ? () => onManage(repo, ref) : undefined}
+            onRetry={validate}
+            busy={busy}
+          />
         )}
       </div>
       <div className="modal-footer">
@@ -1502,7 +1532,8 @@ function Wizard({
           <button
             className="button primary"
             disabled={
-              step === 1 ? !connection : !name.trim() || !endpoint.trim()
+              busy ||
+              (step === 1 ? !connection : !name.trim() || !endpoint.trim())
             }
             onClick={() => {
               setError("");
@@ -1530,6 +1561,81 @@ function Wizard({
     </Modal>
   );
 }
+function ConnectionInstructions({
+  code,
+  onRetry,
+  onManage,
+  busy = false,
+}: {
+  code: string;
+  onRetry?: () => void;
+  onManage?: () => void;
+  busy?: boolean;
+}) {
+  const recovery = connectionRecovery(code);
+  return (
+    <section
+      className="connection-recovery"
+      aria-label="Como resolver a conexão"
+    >
+      <h3>{recovery.title}</h3>
+      <p className="recovery-owner">Quem pode resolver: {recovery.owner}.</p>
+      <ol>
+        {recovery.steps.map((step) => (
+          <li key={step}>{step}</li>
+        ))}
+      </ol>
+      {recovery.credential && (
+        <p className="recovery-owner">
+          O token é enviado por HTTPS ao servidor AIRE, armazenado criptografado
+          e não volta a ser exibido. Quem tem a permissão Gerenciar repositórios
+          e credenciais pode cadastrá-lo em Conexões.
+        </p>
+      )}
+      <div className="recovery-actions">
+        {onManage &&
+          [
+            "github_unconfigured",
+            "github_credentials",
+            "repository_not_allowed",
+            "credential_encryption",
+          ].includes(code) && (
+            <button className="button secondary" onClick={onManage}>
+              Gerenciar conexão
+            </button>
+          )}
+        {recovery.link && (
+          <a
+            className="button secondary"
+            href={recovery.link.href}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {recovery.link.label}
+            <ExternalLink size={14} />
+          </a>
+        )}
+        {recovery.signIn ? (
+          <a className="button primary" href="/">
+            Entrar novamente
+          </a>
+        ) : (
+          onRetry && (
+            <button
+              className="button primary"
+              onClick={onRetry}
+              disabled={busy}
+            >
+              <RefreshCw size={14} />
+              {busy ? "Validando…" : "Tentar novamente"}
+            </button>
+          )
+        )}
+      </div>
+    </section>
+  );
+}
+
 function JourneyDetail({
   journey: j,
   demo,
@@ -2144,7 +2250,7 @@ function JourneyDetail({
     </>
   );
 }
-function Connections({
+export function Connections({
   demo,
   session,
   onMap,
@@ -2152,79 +2258,372 @@ function Connections({
 }: {
   demo: boolean;
   session: Session;
-  onMap: () => void;
+  onMap: (repository?: string) => void;
   canMap: boolean;
 }) {
-  const [data, setData] = useState<{
-      repositories: string[];
-      githubConfigured: boolean;
-      engineConfigured: boolean;
-      groups: number;
-    } | null>(
-      demo
-        ? {
-            repositories: ["northeia-lab/commerce-demo"],
-            githubConfigured: false,
-            engineConfigured: false,
-            groups: 0,
-          }
-        : null,
-    ),
-    [error, setError] = useState(""),
-    [guide, setGuide] = useState(false);
+  const [data, setData] = useState<ConnectionsView | null>(
+    demo
+      ? {
+          revision: 0,
+          repositories: ["northeia-lab/commerce-demo"],
+          githubConfigured: false,
+          credential: null,
+          engineConfigured: false,
+          groups: 0,
+        }
+      : null,
+  );
+  const [error, setError] = useState(""),
+    [notice, setNotice] = useState(""),
+    [busy, setBusy] = useState(false);
+  const [guide, setGuide] = useState(false);
+  const [form, setForm] = useState<"repository" | "credential" | null>(null);
+  const [repository, setRepository] = useState(""),
+    [previousRepository, setPreviousRepository] = useState("");
+  const [label, setLabel] = useState(""),
+    [token, setToken] = useState(""),
+    [formError, setFormError] = useState("");
+  const [confirmation, setConfirmation] = useState<{
+    kind: "repository" | "credential";
+    repository?: string;
+  } | null>(null);
+  const [checks, setChecks] = useState<Record<string, Repository>>({});
+  const [failure, setFailure] = useState<{
+    repository: string;
+    message: string;
+    code: string;
+  } | null>(null);
+  const canManage = !demo && session.permissions.includes("connections:manage");
+  async function load() {
+    setBusy(true);
+    setError("");
+    try {
+      setData(await request<ConnectionsView>("connections"));
+      setChecks({});
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
   useEffect(() => {
-    if (!demo)
-      request<typeof data>("connections")
-        .then(setData)
-        .catch((e) => setError(e.message));
+    if (!demo) void load();
   }, [demo]);
+  function closeForm() {
+    if (!busy) {
+      setForm(null);
+      setToken("");
+      setFormError("");
+    }
+  }
+  function openRepository(value = "") {
+    setPreviousRepository(value);
+    setRepository(value);
+    setFormError("");
+    setForm("repository");
+  }
+  function openCredential() {
+    setLabel(data?.credential?.label || "GitHub da organização");
+    setToken("");
+    setFormError("");
+    setForm("credential");
+  }
+  async function validate(value: string) {
+    if (demo) {
+      onMap(value);
+      return;
+    }
+    setBusy(true);
+    setFailure(null);
+    setError("");
+    setChecks((old) => {
+      const next = { ...old };
+      delete next[value];
+      return next;
+    });
+    try {
+      const result = await request<Repository>("repositories/validate", {
+        method: "POST",
+        body: JSON.stringify({ repository: value }),
+      });
+      setChecks((old) => ({ ...old, [value]: result }));
+    } catch (e) {
+      setFailure({
+        repository: value,
+        message: (e as Error).message,
+        code: e instanceof ApiError ? e.code : "service_error",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function save() {
+    if (!data) return;
+    setBusy(true);
+    setFormError("");
+    setNotice("");
+    try {
+      if (form === "repository") {
+        const value = normalizeRepository(repository);
+        const result = await request<ConnectionsView>(
+          "connections/repositories",
+          {
+            method: previousRepository ? "PATCH" : "POST",
+            body: JSON.stringify({
+              repository: value,
+              revision: data.revision,
+              ...(previousRepository ? { previousRepository } : {}),
+            }),
+          },
+        );
+        setData(result);
+        setChecks({});
+        setForm(null);
+        setNotice(
+          "Repositório cadastrado. A validação confirma o acesso ao código.",
+        );
+        await validate(value);
+      } else {
+        const result = await request<ConnectionsView>("connections/github", {
+          method: "PUT",
+          body: JSON.stringify({
+            label,
+            revision: data.revision,
+            ...(token.trim() ? { token: token.trim() } : {}),
+          }),
+        });
+        setData(result);
+        setToken("");
+        setChecks({});
+        setForm(null);
+        setNotice(
+          "Credencial salva. Valide um repositório para confirmar as permissões.",
+        );
+      }
+    } catch (e) {
+      setFormError((e as Error).message);
+      if (e instanceof ApiError && e.code === "connection_conflict")
+        await load();
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function remove() {
+    if (!data || !confirmation) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const result = await request<ConnectionsView>(
+        confirmation.kind === "credential"
+          ? "connections/github"
+          : "connections/repositories",
+        {
+          method: "DELETE",
+          body: JSON.stringify({
+            revision: data.revision,
+            ...(confirmation.kind === "repository"
+              ? { repository: confirmation.repository }
+              : {}),
+          }),
+        },
+      );
+      setData(result);
+      setChecks({});
+      setFailure(null);
+      setConfirmation(null);
+      setNotice(
+        confirmation.kind === "credential"
+          ? "Credencial removida do AIRE."
+          : "Repositório removido deste workspace.",
+      );
+    } catch (e) {
+      setError((e as Error).message);
+      setConfirmation(null);
+      if (e instanceof ApiError && e.code === "connection_conflict")
+        await load();
+    } finally {
+      setBusy(false);
+    }
+  }
   return (
     <>
       <div className="page-heading">
         <div>
           <div className="eyebrow">INTEGRAÇÕES</div>
           <h1>Conexões</h1>
-          <p>As fontes de contexto da sua organização, em um só lugar.</p>
+          <p>
+            Cadastre as fontes de código e gerencie o acesso da sua organização.
+          </p>
         </div>
-        <button className="button secondary" onClick={() => setGuide(true)}>
-          <BookOpen size={16} />
-          Guia de conexão
-        </button>
+        <div className="connection-toolbar">
+          {!demo && (
+            <button className="button secondary" disabled={busy} onClick={load}>
+              <RefreshCw size={15} />
+              Atualizar
+            </button>
+          )}
+          <button className="button secondary" onClick={() => setGuide(true)}>
+            <BookOpen size={16} />
+            Guia de conexão
+          </button>
+        </div>
       </div>
       {error && (
         <div className="error-panel" role="alert">
           {error}
         </div>
       )}
+      {notice && (
+        <div className="connection-notice" role="status">
+          <CheckCircle2 size={17} />
+          {notice}
+        </div>
+      )}
       <div className="integration-grid">
         <Integration
           icon={<Github size={27} />}
           name="GitHub"
-          description="Código-fonte e revisões das suas jornadas."
+          description="Repositórios autorizados para mapear jornadas."
           status={
             demo
               ? "Demonstração"
-              : data?.githubConfigured
-                ? "Configurado"
-                : "A configurar"
+              : `${data?.repositories.length ?? 0} ${data?.repositories.length === 1 ? "repositório" : "repositórios"}`
           }
         >
-          <p>
-            O acesso é restrito aos repositórios autorizados para este
-            workspace.
-          </p>
-          {data?.repositories.map((r) => (
-            <div className="repo-line" key={r}>
-              <FolderGit2 size={16} />
-              <span>{r}</span>
-              <LockKeyhole size={13} />
+          <div className="connection-section-heading">
+            <h3>Repositórios</h3>
+            {canManage && (
+              <button
+                className="button secondary"
+                disabled={busy || !data}
+                onClick={() => openRepository()}
+              >
+                <Plus size={14} />
+                Novo repositório
+              </button>
+            )}
+          </div>
+          {data?.repositories.length === 0 && (
+            <p className="connection-empty">
+              Nenhum repositório cadastrado. Adicione o primeiro para começar.
+            </p>
+          )}
+          <div className="connection-repositories">
+            {data?.repositories.map((r) => (
+              <div className="connection-repository" key={r}>
+                <div className="connection-repository-name">
+                  <FolderGit2 size={17} />
+                  <strong>{r}</strong>
+                </div>
+                <small>
+                  {checks[r]
+                    ? `Conexão validada · ${checks[r].branch} · ${checks[r].revision.slice(0, 7)}`
+                    : "Cadastrado · acesso ainda não validado nesta sessão"}
+                </small>
+                <div className="connection-row-actions">
+                  {(canMap || canManage) && (
+                    <button
+                      className="button secondary"
+                      disabled={busy}
+                      onClick={() => validate(r)}
+                      aria-label={`Validar ${r}`}
+                    >
+                      Validar conexão
+                    </button>
+                  )}
+                  {canMap && checks[r] && (
+                    <button
+                      className="button secondary"
+                      disabled={busy}
+                      onClick={() => onMap(r)}
+                    >
+                      Mapear jornada
+                    </button>
+                  )}
+                  {canManage && (
+                    <>
+                      <button
+                        className="icon-button"
+                        disabled={busy}
+                        aria-label={`Editar ${r}`}
+                        title="Editar repositório"
+                        onClick={() => openRepository(r)}
+                      >
+                        <Pencil size={15} />
+                      </button>
+                      <button
+                        className="icon-button"
+                        disabled={busy}
+                        aria-label={`Excluir ${r}`}
+                        title="Excluir repositório"
+                        onClick={() =>
+                          setConfirmation({ kind: "repository", repository: r })
+                        }
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="connection-credential">
+            <div className="connection-section-heading">
+              <h3>
+                <KeyRound size={16} />
+                Credencial do GitHub
+              </h3>
+              <Badge tone={data?.githubConfigured ? "green" : "amber"}>
+                {data?.githubConfigured ? "Cadastrada" : "A cadastrar"}
+              </Badge>
             </div>
-          ))}
-          {canMap && (
-            <button className="button secondary" onClick={onMap}>
-              Validar um repositório
-              <ArrowRight size={15} />
-            </button>
+            <p>
+              {data?.credential?.label ||
+                "Cadastre uma credencial com permissão de leitura nos repositórios desta organização."}
+            </p>
+            {data?.credential && (
+              <small>
+                {data.credential.source === "environment"
+                  ? "Origem: configuração do ambiente"
+                  : "Armazenada criptografada no servidor"}
+                {data.credential.updatedAt
+                  ? ` · atualizada em ${new Date(data.credential.updatedAt).toLocaleString("pt-BR")}`
+                  : ""}
+              </small>
+            )}
+            {canManage && (
+              <div className="connection-row-actions">
+                <button
+                  className="button secondary"
+                  disabled={busy || !data}
+                  onClick={openCredential}
+                >
+                  {data?.credential ? <Pencil size={14} /> : <Plus size={14} />}
+                  {data?.credential
+                    ? "Editar credencial"
+                    : "Cadastrar credencial"}
+                </button>
+                {data?.credential && (
+                  <button
+                    className="button secondary"
+                    disabled={busy}
+                    onClick={() => setConfirmation({ kind: "credential" })}
+                  >
+                    <Trash2 size={14} />
+                    Excluir credencial
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+          {!canManage && (
+            <p className="connection-empty">
+              {demo
+                ? "O cadastro fica disponível no ambiente integrado."
+                : "Seu perfil permite consulta. Peça a um responsável com permissão de gerenciar conexões para alterar este cadastro."}
+            </p>
           )}
         </Integration>
         <Integration
@@ -2284,57 +2683,201 @@ function Connections({
           </p>
         </Integration>
       </div>
+      {failure && (
+        <div className="connection-validation">
+          <div className="error-panel" role="alert">
+            <CircleAlert size={18} />
+            <div>
+              <strong>{failure.repository}</strong>
+              <p>{failure.message}</p>
+            </div>
+          </div>
+          <ConnectionInstructions
+            code={failure.code}
+            onRetry={() => validate(failure.repository)}
+            onManage={
+              canManage
+                ? () =>
+                    failure.code === "repository_not_allowed"
+                      ? openRepository(failure.repository)
+                      : openCredential()
+                : undefined
+            }
+            busy={busy}
+          />
+        </div>
+      )}
       <div className="notice">
         <LockKeyhole size={18} />
         <p>
           {demo
             ? "As conexões desta prévia são ilustrativas. Nenhuma credencial real está disponível neste ambiente."
-            : "“Configurado” indica presença da configuração. A validação do repositório confirma o acesso efetivo ao GitHub."}
+            : "Cadastrar uma credencial não confirma suas permissões. Use Validar conexão para verificar o repositório e a revisão."}
         </p>
       </div>
+      {form && (
+        <Modal
+          title={
+            form === "credential"
+              ? data?.credential
+                ? "Editar credencial"
+                : "Cadastrar credencial"
+              : previousRepository
+                ? "Editar repositório"
+                : "Novo repositório"
+          }
+          close={closeForm}
+        >
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void save();
+            }}
+          >
+            <div className="connection-form">
+              {form === "repository" ? (
+                <>
+                  <label className="field">
+                    Repositório GitHub
+                    <input
+                      required
+                      maxLength={500}
+                      autoComplete="off"
+                      disabled={busy}
+                      value={repository}
+                      onChange={(e) => setRepository(e.target.value)}
+                      placeholder="https://github.com/organizacao/repositorio"
+                    />
+                  </label>
+                  <p>
+                    O cadastro autoriza este repositório no workspace. Em
+                    seguida, o AIRE tentará validar o acesso e mostrará como
+                    resolver qualquer falha.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <label className="field">
+                    Nome da credencial
+                    <input
+                      required
+                      maxLength={80}
+                      disabled={busy}
+                      value={label}
+                      onChange={(e) => setLabel(e.target.value)}
+                      autoComplete="off"
+                    />
+                  </label>
+                  <label className="field">
+                    {data?.credential
+                      ? "Novo token (opcional)"
+                      : "Token GitHub"}
+                    <input
+                      type="password"
+                      autoComplete="new-password"
+                      spellCheck={false}
+                      required={!data?.credential}
+                      minLength={20}
+                      maxLength={4096}
+                      disabled={busy}
+                      value={token}
+                      onChange={(e) => setToken(e.target.value)}
+                      placeholder={
+                        data?.credential
+                          ? "Deixe vazio para manter o token atual"
+                          : "Cole o token de acesso"
+                      }
+                    />
+                  </label>
+                  <p>
+                    Use um fine-grained token com Contents: Read-only nos
+                    repositórios cadastrados. O token salvo não será exibido
+                    novamente.
+                  </p>
+                  <a
+                    className="connection-help-link"
+                    href="https://github.com/settings/personal-access-tokens/new"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Criar token no GitHub <ExternalLink size={13} />
+                  </a>
+                </>
+              )}
+              {formError && (
+                <div className="error-panel" role="alert">
+                  {formError}
+                </div>
+              )}
+            </div>
+            <div className="modal-footer">
+              <button
+                type="button"
+                className="button secondary"
+                disabled={busy}
+                onClick={closeForm}
+              >
+                Cancelar
+              </button>
+              <button type="submit" className="button primary" disabled={busy}>
+                {busy
+                  ? "Salvando…"
+                  : form === "repository"
+                    ? "Salvar e validar"
+                    : "Salvar credencial"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+      {confirmation && (
+        <Modal
+          title={
+            confirmation.kind === "credential"
+              ? "Excluir credencial?"
+              : "Excluir repositório?"
+          }
+          close={() => {
+            if (!busy) setConfirmation(null);
+          }}
+        >
+          <div className="connection-form">
+            <p>
+              {confirmation.kind === "credential"
+                ? "A credencial será removida do AIRE e futuras consultas ao GitHub ficarão bloqueadas até um novo cadastro. Para revogar o token também no GitHub, use as configurações da sua conta."
+                : `O repositório ${confirmation.repository} deixará de ser autorizado para novos mapeamentos neste workspace. As análises anteriores serão preservadas.`}
+            </p>
+          </div>
+          <div className="modal-footer">
+            <button
+              className="button secondary"
+              disabled={busy}
+              onClick={() => setConfirmation(null)}
+            >
+              Cancelar
+            </button>
+            <button className="button danger" disabled={busy} onClick={remove}>
+              {busy ? "Excluindo…" : "Confirmar exclusão"}
+            </button>
+          </div>
+        </Modal>
+      )}
       {guide && (
         <Modal title="Conectar o GitHub" close={() => setGuide(false)}>
           <div className="guide-content">
             <p>
-              O administrador configura a credencial no servidor. Não cole
-              tokens na interface nem no repositório.
+              Comece por Novo repositório → Salvar e validar. O AIRE mostrará o
+              motivo e o procedimento para qualquer falha. Gerencie a credencial
+              e os repositórios nesta tela.
             </p>
-            {[
-              [
-                "1",
-                "Autorize o repositório",
-                "Inclua organização/repositório na lista do workspace.",
-              ],
-              [
-                "2",
-                "Configure a credencial",
-                "Use uma credencial com Contents: read somente nos repositórios necessários.",
-              ],
-              [
-                "3",
-                "Libere o SSO",
-                "Se a organização exige SSO, autorize a credencial para ela.",
-              ],
-              [
-                "4",
-                "Valide a conexão",
-                "Abra Mapear jornada e valide a leitura da branch ou commit.",
-              ],
-            ].map(([n, t, d]) => (
-              <div className="guide-step" key={n}>
-                <span>{n}</span>
-                <div>
-                  <h3>{t}</h3>
-                  <p>{d}</p>
-                </div>
-              </div>
-            ))}
+            <ConnectionInstructions code="github_unconfigured" />
           </div>
         </Modal>
       )}
     </>
   );
 }
+
 function Integration({
   icon,
   name,

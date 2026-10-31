@@ -1,6 +1,6 @@
 # Arquitetura da primeira versão
 
-Browser → BFF no mesmo domínio → GitHub / API v1 do motor. O navegador não conhece credenciais do motor, GitHub, OpenAI ou Gemini. O front não chama LLMs. A etapa de narração permanece sob controle do fluxo já integrado ao motor.
+Browser → BFF no mesmo domínio → GitHub / API v1 do motor. Credenciais do motor e dos provedores de IA ficam no servidor. Um responsável autorizado pode enviar um token GitHub pelo formulário de Conexões; o token salvo nunca é retornado ao navegador. O front não chama LLMs. A etapa de narração permanece sob controle do fluxo já integrado ao motor.
 
 ## Fluxo real
 
@@ -44,3 +44,9 @@ As fixtures são separadas e o modo demo exige configuração explícita. O modo
 A primeira versão não inclui um teste de penetração ou homologação com clientes. A política CSP evita frames e origens externas, mas mantém inline scripts/styles exigidos pelo framework; nonce por resposta é uma melhoria planejada. Não há resolução Graph para excesso de grupos nem múltiplos issuers Microsoft na mesma implantação. TLS, backup, gestão/rotação de segredos, monitoramento do BFF e limite de requisições no proxy precisam fazer parte da implantação.
 
 O inventário atual exporta jornadas cadastradas. A descoberta de outros endpoints e o inventário completo do repositório continuam sendo responsabilidade de uma futura extensão do motor.
+
+## Administração de conexões
+
+`GET /api/console/connections` retorna somente metadados e repositórios. `POST`, `PATCH` e `DELETE /api/console/connections/repositories` gerenciam a autorização de repositórios. `PUT` e `DELETE /api/console/connections/github` cadastram/substituem e removem a credencial. Mutações exigem `connections:manage`, Origin exato e revisão otimista; o tenant vem da sessão. A validação de repositórios aceita `journeys:create` ou `connections:manage`.
+
+Tokens são gravados criptografados em `/data/<tenant>/connections.json`; veja `github-connection.md` para derivação da chave, compatibilidade com configuração por ambiente e limites da persistência. A política antiga de admin recebe a nova permissão obrigatória ao ser lida; nenhum outro perfil recebe permissões novas automaticamente.

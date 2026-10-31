@@ -1628,6 +1628,166 @@ hr {
 .guide-content {
   padding: 25px 28px;
 }
+.connection-toolbar,
+.connection-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.connection-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 16px 0;
+  flex-wrap: wrap;
+}
+.connection-section-heading h3 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.connection-section-heading .button,
+.connection-row-actions .button {
+  font-size: 11px;
+  padding: 8px 10px;
+  min-height: 34px;
+}
+.connection-repositories {
+  display: grid;
+  gap: 12px;
+}
+.connection-repository {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+.connection-repository-name {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.connection-repository-name svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.connection-repository small,
+.connection-credential small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.6;
+  margin: 7px 0;
+}
+.connection-credential {
+  margin-top: 22px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+.connection-credential p,
+.connection-empty {
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.connection-row-actions {
+  margin-top: 12px;
+}
+.connection-form {
+  padding: 24px 28px;
+}
+.connection-form p {
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--muted);
+}
+.connection-help-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  color: var(--blue);
+  font-size: 12px;
+}
+.connection-notice {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 14px 16px;
+  background: var(--blue-light);
+  color: var(--blue);
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-size: 12px;
+}
+.connection-validation {
+  max-width: 900px;
+}
+.button.danger {
+  background: #a52c3e;
+  color: white;
+  border-color: #a52c3e;
+}
+.integration-card:first-child {
+  min-width: 0;
+}
+.connection-recovery {
+  margin-top: 14px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  font-size: 12px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+.connection-recovery h3 {
+  font-size: 14px;
+  font-weight: 600;
+}
+.recovery-owner {
+  margin-top: 5px;
+  color: var(--muted);
+}
+.connection-recovery ol {
+  list-style: decimal;
+  padding-left: 20px;
+  margin-top: 12px;
+}
+.connection-recovery li + li {
+  margin-top: 8px;
+}
+.recovery-admin {
+  margin-top: 16px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.recovery-admin summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.recovery-admin p {
+  margin-top: 10px;
+}
+.recovery-admin a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 10px;
+  color: var(--blue);
+  text-decoration: underline;
+}
+.recovery-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
 .guide-content > p {
   font-size: 12px;
   margin: 16px 0 24px;

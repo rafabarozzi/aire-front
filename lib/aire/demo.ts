@@ -11,6 +11,7 @@ export const demoSession: Session = {
     "journeys:create",
     "artifacts:read",
     "connections:read",
+    "connections:manage",
     "access:manage",
   ],
   providers: { google: false, microsoft: false },
