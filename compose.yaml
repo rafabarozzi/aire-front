@@ -1,0 +1,41 @@
+services:
+  front:
+    build: .
+    image: aire-front:0.1.0
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      AIRE_MODE: live
+      AIRE_APP_ORIGIN: https://${AIRE_DOMAIN:-aire.northeia.com}
+      AIRE_DATA_DIR: /data
+    volumes:
+      - aire-data:/data
+    expose:
+      - "3000"
+    networks: [aire]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    mem_limit: 768m
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    environment:
+      AIRE_DOMAIN: ${AIRE_DOMAIN:-aire.northeia.com}
+      ACME_EMAIL: ${ACME_EMAIL:?Configure ACME_EMAIL}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks: [aire]
+    depends_on:
+      front:
+        condition: service_healthy
+volumes:
+  aire-data:
+  caddy-data:
+  caddy-config:
+networks:
+  aire:

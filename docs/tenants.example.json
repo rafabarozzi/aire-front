@@ -1,0 +1,25 @@
+[
+  {
+    "id": "northeia",
+    "name": "Northeia",
+    "members": [
+      {
+        "provider": "google",
+        "subject": "REPLACE_WITH_VERIFIED_GOOGLE_SUB",
+        "role": "admin"
+      },
+      {
+        "provider": "microsoft",
+        "subject": "REPLACE_WITH_VERIFIED_MICROSOFT_SUB",
+        "role": "admin"
+      }
+    ],
+    "groups": [
+      { "id": "REPLACE_WITH_ENTRA_GROUP_OBJECT_ID", "role": "engineer" }
+    ],
+    "repositories": ["rafabarozzi/aire-commerce-lab"],
+    "githubTokenEnv": "NORTHEIA_GITHUB_TOKEN",
+    "engineUrlEnv": "NORTHEIA_ENGINE_URL",
+    "engineTokenEnv": "NORTHEIA_ENGINE_TOKEN"
+  }
+]
