@@ -812,9 +812,14 @@ export function Console() {
                                     "status " +
                                     (j.status === "COMPLETED"
                                       ? "complete"
-                                      : j.status === "FAILED"
-                                        ? "failed"
-                                        : "pending")
+                                      : j.status === "NARRATING"
+                                        ? "O motor está gerando a narrativa com base nas evidências estruturais. A resposta será validada antes da conclusão."
+                                        : j.status === "RENDERING" ||
+                                            j.status === "FINALIZING"
+                                          ? "A narrativa foi recebida. O motor está validando e gerando o relatório e o manifesto canônico."
+                                          : j.status === "FAILED"
+                                            ? "failed"
+                                            : "pending")
                                   }
                                 >
                                   {j.status === "COMPLETED" ? (
@@ -1496,7 +1501,7 @@ function Wizard({
               <p>
                 {demo
                   ? "A simulação cria uma jornada de exemplo nesta sessão. Ela não valida o código nem produz um manifesto canônico."
-                  : "O código será enviado ao motor da sua organização. A análise pode aguardar a etapa de narração configurada no n8n antes de gerar os artefatos."}
+                  : "O código será enviado ao motor da sua organização. O motor mapeia a jornada, gera a narrativa com o provedor de IA configurado e valida a resposta antes de disponibilizar os artefatos."}
               </p>
             </div>
           </>
@@ -1842,10 +1847,14 @@ function JourneyDetail({
             <strong>{statusLabels[j.status]}</strong>
             <p>
               {j.status === "AWAITING_NARRATION"
-                ? "A descoberta estrutural terminou. O motor aguarda a narração do fluxo configurado no n8n. Os artefatos ficam disponíveis após a conclusão."
-                : j.status === "FAILED"
-                  ? "A análise falhou. Verifique a configuração e os logs do motor antes de iniciar uma nova análise."
-                  : "Acompanhe aqui a preparação e o mapeamento do código. O estado é atualizado automaticamente."}
+                ? "A descoberta estrutural terminou. O motor está aguardando a etapa de narração configurada para esta análise."
+                : j.status === "NARRATING"
+                  ? "O motor está gerando a narrativa com base nas evidências estruturais. A resposta será validada antes da conclusão."
+                  : j.status === "RENDERING" || j.status === "FINALIZING"
+                    ? "A narrativa foi recebida. O motor está validando e gerando o relatório e o manifesto canônico."
+                    : j.status === "FAILED"
+                      ? "A análise falhou. Verifique a configuração e os logs do motor antes de iniciar uma nova análise."
+                      : "Acompanhe aqui a preparação e o mapeamento do código. O estado é atualizado automaticamente."}
             </p>
           </div>
         </div>
@@ -2640,7 +2649,8 @@ export function Connections({
         >
           <p>
             Comunicação pelo servidor, com credencial exclusiva da organização.
-            A narração continua no fluxo integrado ao motor.
+            A narração pode ser executada diretamente pelo motor com OpenAI ou
+            Gemini.
           </p>
           <div className="capability">
             <Check size={15} />

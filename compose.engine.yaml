@@ -1,0 +1,12 @@
+# Use together with compose.contabo.yaml. Only the engine API token reaches the front.
+services:
+  front:
+    environment:
+      NORTHEIA_ENGINE_URL: http://aire-engine:8080
+      NORTHEIA_ENGINE_TOKEN: ${AIRE_API_TOKEN:?Load the engine deploy/contabo/.env as the second --env-file}
+    networks:
+      - aire-backend
+networks:
+  aire-backend:
+    external: true
+    name: aire-backend

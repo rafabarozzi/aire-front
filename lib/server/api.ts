@@ -28,6 +28,8 @@ const engineState = z.object({
     "UPLOADING",
     "QUEUED",
     "PREPARING",
+    "NARRATING",
+    "RENDERING",
     "AWAITING_NARRATION",
     "FINALIZING",
     "COMPLETED",

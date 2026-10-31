@@ -14,6 +14,8 @@ export type AnalysisStatus =
   | "UPLOADING"
   | "QUEUED"
   | "PREPARING"
+  | "NARRATING"
+  | "RENDERING"
   | "AWAITING_NARRATION"
   | "FINALIZING"
   | "COMPLETED"
@@ -86,6 +88,8 @@ export const statusLabels: Record<AnalysisStatus, string> = {
   UPLOADING: "Recebendo código",
   QUEUED: "Na fila",
   PREPARING: "Mapeando",
+  NARRATING: "Gerando narrativa",
+  RENDERING: "Gerando artefatos",
   AWAITING_NARRATION: "Aguardando narração",
   FINALIZING: "Finalizando",
   COMPLETED: "Mapeada",

@@ -98,6 +98,27 @@ async function req(
   });
 }
 
+for (const state of ["NARRATING", "RENDERING"] as const) {
+  test(`native engine state ${state} is persisted without exposing provider metadata`, async () => {
+    await saveJourney("alpha", { ...journey, status: "QUEUED" });
+    globalThis.fetch = async () =>
+      Response.json({
+        status: state,
+        narration: {
+          provider: "openai",
+          model: "test-model",
+          private_value: "not-for-browser",
+        },
+      });
+    const response = await api(await req("journeys/" + id), ["journeys", id]);
+    assert.equal(response.status, 200);
+    const payload = (await response.json()) as Journey;
+    assert.equal(payload.status, state);
+    assert.equal((await getJourney("alpha", id)).status, state);
+    assert.equal(JSON.stringify(payload).includes("not-for-browser"), false);
+  });
+}
+
 test("demo mode is opt-in and missing mode stays closed", () => {
   delete process.env.AIRE_MODE;
   assert.equal(isDemo(), false);

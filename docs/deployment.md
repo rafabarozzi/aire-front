@@ -99,3 +99,8 @@ kubectl -n aire rollout status deployment/aire-front
 - Reiniciar o front preserva os metadados e permissões.
 
 A prévia Sites usa `AIRE_MODE=demo` e não é o armazenamento de produção. O build da Contabo usa Next.js standalone e arquivos persistentes.
+
+
+## Motor com narração direta, sem n8n
+
+Depois de instalar o motor com `deploy/contabo/start-engine.sh` do repositório ai-reliability-platform, atualize este front e execute `bash /opt/ai-reliability-platform/deploy/contabo/connect-front.sh`. O script usa `compose.contabo.yaml` e `compose.engine.yaml`, mantém a rede `aire-backend` e injeta somente a URL e o token da API do motor no front. Use esse script também nas próximas atualizações, para preservar o override. As chaves de OpenAI/Gemini permanecem no motor. O painel acompanha NARRATING e RENDERING até os artefatos estarem disponíveis.

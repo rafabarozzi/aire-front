@@ -1,6 +1,6 @@
 # Arquitetura da primeira versão
 
-Browser → BFF no mesmo domínio → GitHub / API v1 do motor. Credenciais do motor e dos provedores de IA ficam no servidor. Um responsável autorizado pode enviar um token GitHub pelo formulário de Conexões; o token salvo nunca é retornado ao navegador. O front não chama LLMs. A etapa de narração permanece sob controle do fluxo já integrado ao motor.
+Browser → BFF no mesmo domínio → GitHub / API v1 do motor. Credenciais do motor e dos provedores de IA ficam no servidor. Um responsável autorizado pode enviar um token GitHub pelo formulário de Conexões; o token salvo nunca é retornado ao navegador. O front não chama LLMs. No modo direto, o próprio motor chama o provedor de IA configurado, valida a narração e gera os artefatos. O modo externo permanece compatível com instalações anteriores.
 
 ## Fluxo real
 
@@ -50,3 +50,4 @@ O inventário atual exporta jornadas cadastradas. A descoberta de outros endpoin
 `GET /api/console/connections` retorna somente metadados e repositórios. `POST`, `PATCH` e `DELETE /api/console/connections/repositories` gerenciam a autorização de repositórios. `PUT` e `DELETE /api/console/connections/github` cadastram/substituem e removem a credencial. Mutações exigem `connections:manage`, Origin exato e revisão otimista; o tenant vem da sessão. A validação de repositórios aceita `journeys:create` ou `connections:manage`.
 
 Tokens são gravados criptografados em `/data/<tenant>/connections.json`; veja `github-connection.md` para derivação da chave, compatibilidade com configuração por ambiente e limites da persistência. A política antiga de admin recebe a nova permissão obrigatória ao ser lida; nenhum outro perfil recebe permissões novas automaticamente.
+
