@@ -50,3 +50,8 @@ pnpm run build:node
 A CI repete esses comandos, constrói o Docker e verifica saúde e negação de acesso sem sessão. Testes de integração usam upstreams simulados; não equivalem a um login real nos provedores nem à execução do motor em produção.
 
 Para a prévia privada no Sites, o projeto preserva o build Vinext e os helpers do starter. `pnpm build` é o build de prévia; `pnpm run build:node` é o build portátil usado no Docker. O runtime de produção na Contabo não depende de Sites. Não envie `.env.production`, arquivos de sessão ou volumes ao Git.
+
+
+## Organizações, consumo e coletores privados
+
+Veja [onboarding empresarial](docs/enterprise-onboarding.md) para habilitar o painel Northeia, cadastrar SSO por workspace, provisionar motores isolados no Atlas e vincular agentes de coleta. As áreas `/admin`, `/collectors` e `/usage` exigem autorização no backend. A operação do agente está no pacote `agents/collector` do repositório `ai-reliability-platform`.

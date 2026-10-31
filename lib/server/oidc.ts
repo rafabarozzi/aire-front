@@ -3,7 +3,6 @@ import {
   AppError,
   appOrigin,
   membership,
-  providers,
   tenants,
   type Identity,
 } from "./config.ts";
@@ -14,102 +13,199 @@ import {
   cookie,
   FLOW_COOKIE,
   SESSION_COOKIE,
+  ONBOARDING_COOKIE,
 } from "./session.ts";
-async function configuration(provider: "google" | "microsoft") {
-  if (!providers()[provider])
-    throw new AppError(
-      503,
-      "provider_unconfigured",
-      "Este provedor ainda não foi configurado pelo administrador.",
-    );
+
+export function identityConnection(
+  provider: "google" | "microsoft",
+  workspace?: string,
+) {
+  const tenant = workspace
+    ? tenants().find((t) => t.id === workspace && t.enabled !== false && t.sso)
+    : undefined;
+  if (workspace && !tenant)
+    throw new AppError(403, "workspace", "Workspace não autorizado.");
   const prefix = provider === "google" ? "AIRE_GOOGLE" : "AIRE_MICROSOFT";
-  const tenant = process.env.AIRE_MICROSOFT_TENANT_ID;
-  if (provider === "microsoft" && !/^[0-9a-f-]{36}$/i.test(tenant || ""))
+  const id = tenant
+    ? tenant.sso?.microsoftTenantId
+    : process.env.AIRE_MICROSOFT_TENANT_ID;
+  if (
+    provider === "microsoft" &&
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      id || "",
+    )
+  )
     throw new AppError(
       503,
       "configuration",
-      "Configure um tenant específico no Microsoft Entra ID.",
+      "Configure o tenant Microsoft deste workspace.",
     );
-  const issuer =
-    provider === "google"
-      ? "https://accounts.google.com"
-      : `https://login.microsoftonline.com/${tenant}/v2.0`;
-  return oidc.discovery(
-    new URL(issuer),
-    process.env[prefix + "_CLIENT_ID"]!,
-    process.env[prefix + "_CLIENT_SECRET"]!,
-    undefined,
-    { timeout: 15 },
-  );
+  if (tenant && provider === "google" && !tenant.sso?.googleDomains.length)
+    throw new AppError(
+      403,
+      "provider",
+      "Google não está autorizado neste workspace.",
+    );
+  const clientId = process.env[prefix + "_CLIENT_ID"],
+    clientSecret = process.env[prefix + "_CLIENT_SECRET"];
+  if (!clientId || !clientSecret)
+    throw new AppError(
+      503,
+      "configuration",
+      "Configure o aplicativo de identidade no servidor.",
+    );
+  return {
+    tenant,
+    issuer:
+      provider === "google"
+        ? "https://accounts.google.com"
+        : `https://login.microsoftonline.com/${id!.toLowerCase()}/v2.0`,
+    clientId,
+    clientSecret,
+  };
+}
+export function validatedIdentity(
+  provider: "google" | "microsoft",
+  claims: Record<string, unknown>,
+  workspace?: string,
+): Identity {
+  const connection = identityConnection(provider, workspace);
+  if (claims.iss !== connection.issuer || typeof claims.sub !== "string")
+    throw new Error("Identity issuer mismatch");
+  if (
+    provider === "microsoft" &&
+    claims.tid !== connection.issuer.split("/")[3]
+  )
+    throw new Error("Identity tenant mismatch");
+  if (
+    connection.tenant &&
+    provider === "google" &&
+    (typeof claims.hd !== "string" ||
+      !connection.tenant.sso!.googleDomains.includes(claims.hd))
+  )
+    throw new Error("Workspace domain mismatch");
+  // Overage is explicitly refused for group-based authorization; direct members can sign in.
+  const groups = Array.isArray(claims.groups)
+    ? claims.groups
+        .filter((g): g is string => typeof g === "string")
+        .slice(0, 200)
+    : [];
+  return {
+    sub: claims.sub,
+    issuer: connection.issuer,
+    provider,
+    workspace,
+    objectId: typeof claims.oid === "string" ? claims.oid : undefined,
+    domain: typeof claims.hd === "string" ? claims.hd : undefined,
+    name:
+      typeof claims.name === "string"
+        ? claims.name.slice(0, 120)
+        : "Usuário AIRE",
+    groups,
+  };
 }
 export async function auth(request: Request, provider: "google" | "microsoft") {
   const origin = appOrigin(),
     redirectUri = origin + `/auth/${provider}`;
   const current = new URL(redirectUri);
   current.search = new URL(request.url).search;
-  const config = await configuration(provider);
-  if (!current.searchParams.has("code") && !current.searchParams.has("error")) {
-    const verifier = oidc.randomPKCECodeVerifier(),
-      state = oidc.randomState(),
-      nonce = oidc.randomNonce();
-    const destination = oidc.buildAuthorizationUrl(config, {
-      redirect_uri: redirectUri,
-      scope: "openid profile email",
-      code_challenge: await oidc.calculatePKCECodeChallenge(verifier),
-      code_challenge_method: "S256",
-      state,
-      nonce,
-    });
-    const flow = await seal(
-      { provider, verifier, state, nonce },
-      "oidc-flow",
-      600,
-    );
-    return new Response(null, {
-      status: 302,
-      headers: {
-        Location: destination.href,
-        "Set-Cookie": cookie(FLOW_COOKIE, flow, 600),
-        "Cache-Control": "no-store",
-      },
-    });
-  }
   try {
-    const flow = await unseal(readCookie(request, FLOW_COOKIE), "oidc-flow");
+    const callback =
+      current.searchParams.has("code") || current.searchParams.has("error");
+    const flow = callback
+      ? await unseal(readCookie(request, FLOW_COOKIE), "oidc-flow")
+      : undefined;
+    const workspace = callback
+      ? typeof flow?.workspace === "string"
+        ? flow.workspace
+        : undefined
+      : current.searchParams.get("workspace") || undefined;
+    const connection = identityConnection(provider, workspace);
     if (
-      flow.provider !== provider ||
-      typeof flow.verifier !== "string" ||
-      typeof flow.state !== "string" ||
-      typeof flow.nonce !== "string"
+      callback &&
+      (flow?.provider !== provider ||
+        flow.issuer !== connection.issuer ||
+        typeof flow.verifier !== "string" ||
+        typeof flow.state !== "string" ||
+        typeof flow.nonce !== "string")
     )
-      throw new Error();
+      throw new Error("Invalid authorization flow");
+    const config = await oidc.discovery(
+      new URL(connection.issuer),
+      connection.clientId,
+      connection.clientSecret,
+      undefined,
+      { timeout: 15 },
+    );
+    if (!callback) {
+      const verifier = oidc.randomPKCECodeVerifier(),
+        state = oidc.randomState(),
+        nonce = oidc.randomNonce();
+      const destination = oidc.buildAuthorizationUrl(config, {
+        redirect_uri: redirectUri,
+        scope: "openid profile email",
+        code_challenge: await oidc.calculatePKCECodeChallenge(verifier),
+        code_challenge_method: "S256",
+        state,
+        nonce,
+      });
+      return new Response(null, {
+        status: 302,
+        headers: {
+          Location: destination.href,
+          "Set-Cookie": cookie(
+            FLOW_COOKIE,
+            await seal(
+              {
+                provider,
+                workspace,
+                issuer: connection.issuer,
+                verifier,
+                state,
+                nonce,
+              },
+              "oidc-flow",
+              600,
+            ),
+            600,
+          ),
+          "Cache-Control": "no-store",
+        },
+      });
+    }
     const tokens = await oidc.authorizationCodeGrant(config, current, {
-      pkceCodeVerifier: flow.verifier,
-      expectedState: flow.state,
-      expectedNonce: flow.nonce,
+      pkceCodeVerifier: flow!.verifier as string,
+      expectedState: flow!.state as string,
+      expectedNonce: flow!.nonce as string,
       idTokenExpected: true,
     });
-    const claims = tokens.claims()!;
-    // Bind access to immutable issuer-specific subject, never email/domain matching.
-    const allowedGroups = new Set(
-      tenants().flatMap((t) => t.groups.map((g) => g.id)),
-    );
-    const identity: Identity = {
-      sub: claims.sub,
-      provider,
-      name:
-        typeof claims.name === "string"
-          ? claims.name.slice(0, 120)
-          : "Usuário AIRE",
-      groups: Array.isArray(claims.groups)
-        ? claims.groups
-            .filter(
-              (g): g is string => typeof g === "string" && allowedGroups.has(g),
-            )
-            .slice(0, 30)
-        : [],
-    };
-    membership(identity);
+    const identity = validatedIdentity(provider, tokens.claims()!, workspace);
+    try {
+      membership(identity);
+    } catch {
+      const safe = {
+        provider: identity.provider,
+        issuer: identity.issuer,
+        subject: identity.sub,
+        objectId: identity.objectId,
+        workspace: identity.workspace,
+      };
+      const headers = new Headers({
+        Location: origin + "/?auth_error=membership",
+        "Cache-Control": "no-store",
+      });
+      headers.append(
+        "Set-Cookie",
+        cookie(
+          ONBOARDING_COOKIE,
+          await seal({ identity: safe }, "onboarding-identity", 300),
+          300,
+        ),
+      );
+      headers.append("Set-Cookie", cookie(FLOW_COOKIE, "", 0));
+      headers.append("Set-Cookie", cookie(SESSION_COOKIE, "", 0));
+      return new Response(null, { status: 302, headers });
+    }
     const headers = new Headers({
       Location: origin,
       "Cache-Control": "no-store",
@@ -119,6 +215,7 @@ export async function auth(request: Request, provider: "google" | "microsoft") {
       cookie(SESSION_COOKIE, await seal({ identity }, "session", 1800), 1800),
     );
     headers.append("Set-Cookie", cookie(FLOW_COOKIE, "", 0));
+    headers.append("Set-Cookie", cookie(ONBOARDING_COOKIE, "", 0));
     return new Response(null, { status: 302, headers });
   } catch {
     return new Response(null, {

@@ -5,6 +5,9 @@ export const permissions = [
   "connections:read",
   "connections:manage",
   "access:manage",
+  "collectors:read",
+  "collectors:manage",
+  "usage:read",
 ] as const;
 export type Permission = (typeof permissions)[number];
 export type Role = "admin" | "engineer" | "viewer";
@@ -28,6 +31,14 @@ export type Session = {
   role?: Role;
   permissions: Permission[];
   providers: { google: boolean; microsoft: boolean };
+  platformAdmin?: boolean;
+  onboardingIdentity?: {
+    provider: string;
+    issuer: string;
+    subject: string;
+    objectId?: string;
+    workspace?: string;
+  };
 };
 export type Journey = {
   id: string;
@@ -80,6 +91,7 @@ export const defaultPolicy: RolePolicy = {
     "journeys:create",
     "artifacts:read",
     "connections:read",
+    "collectors:read",
   ],
   viewer: ["journeys:read", "artifacts:read"],
 };

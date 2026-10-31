@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Role } from "../aire/types.ts";
 export class AppError extends Error {
   status: number;
@@ -10,7 +12,7 @@ export class AppError extends Error {
   }
 }
 const role = z.enum(["admin", "engineer", "viewer"]);
-const tenantSchema = z.object({
+export const tenantSchema = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
   name: z.string().min(1),
   members: z
@@ -27,6 +29,30 @@ const tenantSchema = z.object({
   githubTokenEnv: z.string().regex(/^[A-Z][A-Z0-9_]+$/),
   engineUrlEnv: z.string().regex(/^[A-Z][A-Z0-9_]+$/),
   engineTokenEnv: z.string().regex(/^[A-Z][A-Z0-9_]+$/),
+  enabled: z.boolean().optional(),
+  sso: z
+    .object({
+      microsoftTenantId: z.string().uuid().optional(),
+      googleDomains: z
+        .array(
+          z
+            .string()
+            .toLowerCase()
+            .regex(/^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}$/),
+        )
+        .max(20)
+        .default([]),
+    })
+    .strict()
+    .optional(),
+  plan: z
+    .object({
+      name: z.string().min(1).max(80),
+      monthlyUsd: z.number().finite().nonnegative(),
+      infrastructureMonthlyUsd: z.number().finite().nonnegative().optional(),
+    })
+    .strict()
+    .optional(),
 });
 export type Tenant = z.infer<typeof tenantSchema>;
 export type Identity = {
@@ -34,13 +60,47 @@ export type Identity = {
   provider: "google" | "microsoft";
   groups: string[];
   name: string;
+  issuer?: string;
+  workspace?: string;
+  objectId?: string;
+  domain?: string;
 };
+export function managedRegistry() {
+  try {
+    const value = JSON.parse(
+      readFileSync(
+        join(process.env.AIRE_DATA_DIR || "/data", "managed-tenants.json"),
+        "utf8",
+      ),
+    );
+    return z
+      .object({
+        revision: z.number().int().nonnegative(),
+        tenants: z.array(tenantSchema),
+      })
+      .strict()
+      .parse(value);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT")
+      return { revision: 0, tenants: [] as Tenant[] };
+    throw new AppError(
+      503,
+      "tenant_storage",
+      "O cadastro de organizações precisa ser revisado.",
+    );
+  }
+}
 export const isDemo = () => process.env.AIRE_MODE === "demo";
 export function tenants(): Tenant[] {
   try {
-    const ts = z
+    const configured = z
       .array(tenantSchema)
       .parse(JSON.parse(process.env.AIRE_TENANTS_JSON || "[]"));
+    const managed = managedRegistry().tenants;
+    const ts = [
+      ...configured.filter((t) => !managed.some((m) => m.id === t.id)),
+      ...managed,
+    ];
     if (new Set(ts.map((t) => t.id)).size !== ts.length) throw new Error();
     return ts;
   } catch {
@@ -56,8 +116,35 @@ export function membership(
   ts: Tenant[] = tenants(),
 ): { tenant: Tenant; role: Role } {
   const matches = ts.flatMap((tenant) => {
+    if (
+      tenant.enabled === false ||
+      (identity.workspace && identity.workspace !== tenant.id)
+    )
+      return [];
+    if (tenant.sso) {
+      if (identity.workspace !== tenant.id) return [];
+      if (
+        identity.provider === "microsoft" &&
+        (!tenant.sso.microsoftTenantId ||
+          identity.issuer !==
+            `https://login.microsoftonline.com/${tenant.sso.microsoftTenantId}/v2.0`)
+      )
+        return [];
+      if (
+        identity.provider === "google" &&
+        (identity.issuer !== "https://accounts.google.com" ||
+          !identity.domain ||
+          !tenant.sso.googleDomains.includes(identity.domain))
+      )
+        return [];
+    }
     const member = tenant.members.find(
-      (m) => m.provider === identity.provider && m.subject === identity.sub,
+      (m) =>
+        m.provider === identity.provider &&
+        (m.subject === identity.sub ||
+          (tenant.sso &&
+            identity.provider === "microsoft" &&
+            m.subject === identity.objectId)),
     );
     const groups =
       identity.provider === "microsoft"

@@ -238,7 +238,11 @@ export async function engine(
     throw new AppError(503, "configuration", "Endereço do motor inválido.");
   const response = await fetch(base.replace(/\/$/, "") + path, {
     ...init,
-    headers: { ...init.headers, Authorization: `Bearer ${token}` },
+    headers: {
+      ...init.headers,
+      Authorization: `Bearer ${token}`,
+      "X-AIRE-Tenant": tenant.id,
+    },
     redirect: "error",
     signal: AbortSignal.timeout(60000),
     cache: "no-store",

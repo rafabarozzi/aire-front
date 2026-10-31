@@ -63,6 +63,13 @@ export async function readPolicy(tenant: string): Promise<RolePolicy> {
     // Preserve existing grants and add the new mandatory permission only to admin.
     if (Array.isArray(raw?.admin) && !raw.admin.includes("connections:manage"))
       raw.admin.push("connections:manage");
+    if (Array.isArray(raw?.admin))
+      for (const permission of [
+        "collectors:read",
+        "collectors:manage",
+        "usage:read",
+      ])
+        if (!raw.admin.includes(permission)) raw.admin.push(permission);
     return policySchema.parse(raw);
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code === "ENOENT")

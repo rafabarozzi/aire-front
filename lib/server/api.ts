@@ -2,6 +2,8 @@ import { z } from "zod";
 import { AppError } from "./config.ts";
 import { checkOrigin, context, cookie, SESSION_COOKIE } from "./session.ts";
 import { connectionsApi } from "./connections-api.ts";
+import { platformApi } from "./platform.ts";
+import { authorizedRepositories } from "./connections.ts";
 import {
   getJourney,
   listJourneys,
@@ -59,6 +61,89 @@ const json = (value: unknown, status = 200) =>
 export async function api(request: Request, path: string[]) {
   try {
     if (request.method !== "GET") checkOrigin(request);
+    if (path[0] === "platform")
+      return json(await platformApi(request, path, () => body(request)));
+    if (path[0] === "usage" && path.length === 1 && request.method === "GET") {
+      const c = await context(request, "usage:read");
+      const report = z
+        .object({
+          month: z.string(),
+          attempts: z.number(),
+          input_tokens: z.number(),
+          output_tokens: z.number(),
+          usage_unknown_attempts: z.number(),
+        })
+        .parse(await (await engine(c.tenant, "/v1/usage")).json());
+      return json({
+        month: report.month,
+        attempts: report.attempts,
+        input_tokens: report.input_tokens,
+        output_tokens: report.output_tokens,
+        usage_unknown_attempts: report.usage_unknown_attempts,
+        plan: c.tenant.plan?.name || null,
+      });
+    }
+    if (path[0] === "collectors") {
+      const c = await context(
+        request,
+        request.method === "GET" ? "collectors:read" : "collectors:manage",
+      );
+      if (path.length === 1 && request.method === "GET")
+        return json(await (await engine(c.tenant, "/v1/collectors")).json());
+      if (
+        path.length === 2 &&
+        path[1] === "enrollments" &&
+        request.method === "POST"
+      ) {
+        const data = z
+          .object({
+            label: z.string().min(1).max(80),
+            repositories: z
+              .array(z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/))
+              .min(1)
+              .max(500),
+          })
+          .strict()
+          .safeParse(await body(request));
+        if (!data.success)
+          throw new AppError(
+            422,
+            "validation",
+            "Informe nome e repositórios do coletor.",
+          );
+        const allowed = (await authorizedRepositories(c.tenant)).map((r) =>
+          r.toLowerCase(),
+        );
+        if (
+          data.data.repositories.some((r) => !allowed.includes(r.toLowerCase()))
+        )
+          throw new AppError(
+            403,
+            "repository_not_allowed",
+            "Cadastre os repositórios em Conexões antes de autorizar o coletor.",
+          );
+        return json(
+          await (
+            await engine(c.tenant, "/v1/collectors/enrollments", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(data.data),
+            })
+          ).json(),
+          201,
+        );
+      }
+      if (
+        path.length === 2 &&
+        request.method === "DELETE" &&
+        z.string().uuid().safeParse(path[1]).success
+      ) {
+        await engine(c.tenant, `/v1/collectors/${path[1]}`, {
+          method: "DELETE",
+        });
+        return json({ revoked: true });
+      }
+    }
     if (path[0] === "logout" && request.method === "POST")
       return new Response(null, {
         status: 204,
@@ -134,6 +219,54 @@ export async function api(request: Request, path: string[]) {
             "Revise nome, endpoint, criticidade e revisão da jornada.",
           );
         const input = parsed.data;
+        if (input.collectorId) {
+          const allowed = await authorizedRepositories(c.tenant);
+          if (
+            !allowed.some(
+              (r) => r.toLowerCase() === input.repository.toLowerCase(),
+            )
+          )
+            throw new AppError(
+              403,
+              "repository_not_allowed",
+              "Repositório não autorizado nesta organização.",
+            );
+          const created = z
+            .object({ analysis_id: z.string().uuid(), created_at: z.string() })
+            .parse(
+              await (
+                await engine(
+                  c.tenant,
+                  `/v1/collectors/${input.collectorId}/analyses`,
+                  {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      journey_name: input.name,
+                      journey_tier: input.tier,
+                      endpoint: input.endpoint,
+                      repository: input.repository,
+                      revision: input.revision,
+                      source_subdirectory: input.sourceSubdirectory,
+                    }),
+                  },
+                )
+              ).json(),
+            );
+          const journey: Journey = {
+            id: created.analysis_id,
+            name: input.name,
+            tier: input.tier,
+            endpoint: input.endpoint,
+            repository: input.repository,
+            revision: input.revision,
+            status: "AWAITING_SOURCE",
+            createdAt: created.created_at,
+            stacks: [],
+          };
+          await saveJourney(c.tenant.id, journey);
+          return json(journey, 202);
+        }
         if (busy.has(c.tenant.id))
           throw new AppError(
             429,

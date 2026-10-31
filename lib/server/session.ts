@@ -9,8 +9,10 @@ import {
 } from "./config.ts";
 import { defaultPolicy, type Permission } from "../aire/types.ts";
 import { readPolicy } from "./store.ts";
+import { isPlatformAdmin } from "./platform.ts";
 export const SESSION_COOKIE = "__Host-aire-session";
 export const FLOW_COOKIE = "__Host-aire-flow";
+export const ONBOARDING_COOKIE = "__Host-aire-onboarding";
 async function key() {
   const secret = process.env.AIRE_SESSION_SECRET || "";
   if (secret.length < 32)
@@ -118,15 +120,33 @@ export async function sessionResponse(request: Request) {
       role: c.role,
       permissions: c.permissions,
       providers: providers(),
+      platformAdmin: isPlatformAdmin(c.identity),
+      identity: {
+        issuer: c.identity.issuer,
+        subject: c.identity.sub,
+        objectId: c.identity.objectId,
+      },
     };
   } catch (e) {
-    if (e instanceof AppError && e.status === 401)
+    if (e instanceof AppError && e.status === 401) {
+      let onboardingIdentity;
+      try {
+        const payload = await unseal(
+          readCookie(request, ONBOARDING_COOKIE),
+          "onboarding-identity",
+        );
+        onboardingIdentity = payload.identity;
+      } catch {
+        /* No valid identity test was completed. */
+      }
       return {
         mode: "live",
         authenticated: false,
         permissions: [],
         providers: providers(),
+        onboardingIdentity,
       };
+    }
     throw e;
   }
 }

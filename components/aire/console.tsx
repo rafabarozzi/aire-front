@@ -91,6 +91,9 @@ const permissionLabels: Record<Permission, string> = {
   "connections:read": "Visualizar conexões",
   "connections:manage": "Gerenciar repositórios e credenciais",
   "access:manage": "Administrar acessos",
+  "collectors:read": "Visualizar coletores",
+  "collectors:manage": "Gerenciar coletores",
+  "usage:read": "Visualizar consumo",
 };
 const roleLabels: Record<Role, string> = {
   admin: "Administrador",
@@ -375,6 +378,24 @@ export function Console() {
         <div className="nav-spacer" />
         <div className="nav-label">ADMINISTRAÇÃO</div>
         <nav aria-label="Administração">
+          {session.platformAdmin && (
+            <a className="nav-item" href="/admin">
+              <Users />
+              <span>Clientes e consumo</span>
+            </a>
+          )}
+          {can("collectors:read") && (
+            <a className="nav-item" href="/collectors">
+              <Link2 />
+              <span>Coletores privados</span>
+            </a>
+          )}
+          {can("usage:read") && (
+            <a className="nav-item" href="/usage">
+              <Activity />
+              <span>Consumo</span>
+            </a>
+          )}
           {can("access:manage") && (
             <Nav
               icon={<Users />}
@@ -3289,7 +3310,9 @@ function Login({
   toggleTheme: () => void;
 }) {
   const [message, setMessage] = useState("");
+  const [workspace, setWorkspace] = useState("");
   useEffect(() => {
+    setWorkspace(new URLSearchParams(location.search).get("workspace") || "");
     if (new URLSearchParams(location.search).has("auth_error"))
       setMessage(
         "Não foi possível concluir o acesso. Confira a vinculação do seu usuário à organização e tente novamente.",
@@ -3304,7 +3327,10 @@ function Login({
       );
       return;
     }
-    location.href = "/auth/" + provider;
+    location.href =
+      "/auth/" +
+      provider +
+      (workspace ? "?workspace=" + encodeURIComponent(workspace) : "");
   }
   return (
     <div className="login-page">
@@ -3348,6 +3374,19 @@ function Login({
           <div className="eyebrow">BEM-VINDO AO AIRE</div>
           <h2>Acesse seu workspace</h2>
           <p>Continue com sua identidade corporativa.</p>
+          <label className="field">
+            Workspace
+            <input
+              value={workspace}
+              onChange={(e) =>
+                setWorkspace(e.target.value.trim().toLowerCase())
+              }
+              placeholder="Identificador informado pela sua organização"
+              maxLength={64}
+              autoComplete="organization"
+            />
+            <small>Deixe em branco para o workspace padrão.</small>
+          </label>
           <button className="sso-button" onClick={() => login("microsoft")}>
             <MicrosoftIcon />
             Continuar com Microsoft
@@ -3361,6 +3400,30 @@ function Login({
           {message && (
             <div className="error-panel" role="alert">
               {message}
+            </div>
+          )}
+          {session.onboardingIdentity && (
+            <div className="form-note" style={{ overflowWrap: "anywhere" }}>
+              <div>
+                <strong>Identidade confirmada; vínculo pendente</strong>
+                <p>
+                  Envie estes identificadores ao administrador para autorizar
+                  seu acesso.
+                </p>
+                <p>
+                  Workspace: {session.onboardingIdentity.workspace || "padrão"}
+                  <br />
+                  Provedor: {session.onboardingIdentity.provider}
+                  <br />
+                  Subject: {session.onboardingIdentity.subject}
+                  {session.onboardingIdentity.objectId && (
+                    <>
+                      <br />
+                      Object ID: {session.onboardingIdentity.objectId}
+                    </>
+                  )}
+                </p>
+              </div>
             </div>
           )}
           <div className="login-security">
