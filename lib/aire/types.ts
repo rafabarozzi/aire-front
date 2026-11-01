@@ -104,6 +104,6 @@ export const statusLabels: Record<AnalysisStatus, string> = {
   RENDERING: "Gerando artefatos",
   AWAITING_NARRATION: "Aguardando narração",
   FINALIZING: "Finalizando",
-  COMPLETED: "Mapeada",
+  COMPLETED: "Análise concluída",
   FAILED: "Falha na análise",
 };

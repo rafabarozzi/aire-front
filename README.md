@@ -20,7 +20,7 @@ Abra `http://localhost:3000`. O modo de demonstração é explícito, usa apenas
 - Conexões: cadastrar, editar, excluir e validar repositórios; gerenciar uma credencial GitHub criptografada por workspace, com permissão específica e instruções de recuperação. Veja [o guia de conexões](docs/github-connection.md).
 - BFF: valida a lista de repositórios da organização, fixa o SHA, baixa snapshot limitado a 50 MB, cria a análise e envia o ZIP à API v1 do motor.
 - Consulta de estado, incluindo `AWAITING_NARRATION`. Esta versão não substitui o n8n nem executa a narração.
-- Visualização do manifesto real v1 com serviços, recursos, dependências direcionadas/condicionais e evidências. O desenho limita-se a 24 elementos e explicita o limite; o artefato original permanece completo.
+- Duas abas por jornada: Mapa da jornada (macrofluxo integral, com zoom/rolagem/tela cheia, seguido do relatório Markdown formatado) e Artefatos (downloads MD/JSON originais). Nenhum passo do diagrama é truncado por contagem.
 - Download do Markdown e manifesto original. Na demo, o JSON é identificado como exemplo da interface e **não** se apresenta como manifesto canônico.
 - Inventário Markdown das jornadas cadastradas. Ainda não é uma varredura automática de todos os endpoints de um repositório.
 - OIDC Google e Microsoft Entra ID com Authorization Code, PKCE, state e nonce, usando `openid-client`.

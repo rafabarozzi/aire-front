@@ -33,7 +33,9 @@ O motor atual é o piloto com token estático e sem tenant nativo. O BFF separa 
 
 A projeção visual valida documentType, profile, versão, analysis ID, nós e referências de dependência/evidência. Não substitui a validação integral de schema e hashes realizada pelo motor. Os downloads preservam os bytes de origem. Não se deriva tecnologia ou disponibilidade de evidência insuficiente; campos desconhecidos ficam sem métrica.
 
-O mapa real mostra até 24 elementos e até 12 relações/8 evidências no painel de seleção. Os totais e o arquivo exportado preservam o conjunto completo. A posição gráfica não é ordem de execução; linhas tracejadas representam condicionalidade, e relações assíncronas são identificadas na lista. As identidades são lógicas, sem assumir serviço/ambiente Datadog resolvido.
+A página real usa o macrofluxo Mermaid presente no relatório do motor, sem cortar elementos ou ramificações. O diagrama tem zoom, rolagem e tela cheia; abaixo fica o restante do Markdown com tabelas, dependências, limites e evidências. A segunda aba reúne os artefatos originais. O carregamento usa a rota autenticada de artefatos e preserva `artifacts:read`; requisições antigas são canceladas quando a jornada muda. Erros de carga têm opção de tentar novamente. Falhas de renderização preservam o código do diagrama e o documento.
+
+Markdown não executa HTML e não carrega imagens externas. Mermaid é empacotado localmente, com segurança estrita e SVG sanitizado. Diretivas de configuração, ações de clique e referências CSS externas são recusadas. Diagramas acima dos limites de renderização falham visivelmente, sem omitir silenciosamente parte do fluxo. “Análise concluída” descreve o estado do trabalho, sem afirmar cobertura completa ou prontidão operacional.
 
 Persistência: um diretório por organização, arquivos JSON escritos com rename atômico e permissões restritas. Deploy de uma réplica; não usar armazenamento local como base para múltiplos pods concorrentes. Antes de escalar: banco transacional compartilhado, idempotência, fila persistente, limitação de taxa distribuída, auditoria completa e estratégia de retenção.
 

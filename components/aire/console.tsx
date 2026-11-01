@@ -8,7 +8,6 @@ import {
   Bell,
   BookOpen,
   Check,
-  CheckCheck,
   ChevronDown,
   ChevronRight,
   CircleHelp,
@@ -68,7 +67,7 @@ import {
   topologyNodes,
   topologyEdges,
 } from "@/lib/aire/demo";
-import { CanonicalMap } from "./canonical-map";
+import { JourneyReport } from "./journey-report";
 import { normalizeRepository, journeyInputSchema } from "@/lib/aire/validation";
 import { ApiError, request } from "@/lib/aire/client";
 import { connectionRecovery } from "@/lib/aire/connection-recovery";
@@ -1681,15 +1680,15 @@ function JourneyDetail({
     [node, setNode] = useState(topologyNodes[0]),
     [refreshing, setRefreshing] = useState(false),
     [error, setError] = useState(""),
-    [artifact, setArtifact] = useState<Record<string, unknown> | null>(null),
     [zoom, setZoom] = useState(1),
-    [reviewed, setReviewed] = useState(false);
+    [reportRevision, setReportRevision] = useState(0);
   const syntheticGraph = demo && j.id === "demo-checkout";
   async function refresh() {
     setRefreshing(true);
     setError("");
     try {
       updated(await request<Journey>("journeys/" + j.id));
+      setReportRevision((value) => value + 1);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -1715,20 +1714,6 @@ function JourneyDetail({
       clearInterval(t);
     };
   }, [demo, j.id, j.status, updated]);
-  useEffect(() => {
-    if (demo || j.status !== "COMPLETED" || !canExport) return;
-    let active = true;
-    request<Record<string, unknown>>("journeys/" + j.id + "/artifacts/manifest")
-      .then((a) => {
-        if (active) setArtifact(a);
-      })
-      .catch((e) => {
-        if (active) setError(e.message);
-      });
-    return () => {
-      active = false;
-    };
-  }, [demo, j.id, j.status, canExport]);
   async function exportFile(kind: "markdown" | "manifest") {
     if (!canExport) return;
     if (demo) {
@@ -1773,11 +1758,6 @@ function JourneyDetail({
       notify((e as Error).message);
     }
   }
-  const gaps = demo
-    ? j.gaps || 0
-    : artifact && Array.isArray(artifact.unresolvedFacts)
-      ? artifact.unresolvedFacts.length
-      : undefined;
   return (
     <>
       <button className="back-button" onClick={back}>
@@ -1887,8 +1867,6 @@ function JourneyDetail({
       >
         {[
           ["mapa", "Mapa da jornada", Network],
-          ["evidencias", "Evidências", Code2],
-          ["revisao", "Pontos para revisão", CircleAlert],
           ["artefatos", "Artefatos", FileText],
         ].map(([id, title, Icon]) => (
           <button
@@ -1899,336 +1877,205 @@ function JourneyDetail({
             onClick={() => setTab(String(id))}
           >
             {typeof Icon !== "string" && <Icon size={16} />} {String(title)}
-            {id === "revisao" && gaps !== undefined && <span>{gaps}</span>}
           </button>
         ))}
       </div>
       {tab === "mapa" ? (
-        <div className="detail-grid">
-          <section className="panel graph-panel">
-            <div className="panel-heading">
-              <div>
-                <h2>O caminho da jornada</h2>
-                <p>
-                  {syntheticGraph
-                    ? "Selecione um serviço para explorar suas evidências."
-                    : demo
-                      ? "Contexto ilustrativo da jornada selecionada."
-                      : "Contexto estrutural retornado pelo motor."}
-                </p>
-              </div>
-              {syntheticGraph && (
-                <div className="graph-controls">
-                  <button
-                    aria-label="Reduzir mapa"
-                    onClick={() => setZoom(Math.max(0.7, zoom - 0.1))}
-                  >
-                    −
-                  </button>
-                  <button
-                    onClick={() => setZoom(1)}
-                    aria-label="Restaurar zoom"
-                  >
-                    {Math.round(zoom * 100)}%
-                  </button>
-                  <button
-                    aria-label="Ampliar mapa"
-                    onClick={() => setZoom(Math.min(1.3, zoom + 0.1))}
-                  >
-                    +
-                  </button>
+        !demo ? (
+          <JourneyReport
+            key={j.id}
+            analysisId={j.id}
+            ready={j.status === "COMPLETED"}
+            canRead={canExport}
+            revision={reportRevision}
+          />
+        ) : (
+          <div className="detail-grid">
+            <section className="panel graph-panel">
+              <div className="panel-heading">
+                <div>
+                  <h2>O caminho da jornada</h2>
+                  <p>
+                    {syntheticGraph
+                      ? "Selecione um serviço para explorar suas evidências."
+                      : demo
+                        ? "Contexto ilustrativo da jornada selecionada."
+                        : "Contexto estrutural retornado pelo motor."}
+                  </p>
                 </div>
-              )}
-            </div>
-            {syntheticGraph ? (
-              <>
-                <div className="graph-viewport">
-                  <div
-                    className="graph-canvas"
-                    style={{
-                      transform: `scale(${zoom})`,
-                      transformOrigin: "top left",
-                    }}
-                  >
-                    <svg
-                      className="graph-wires"
-                      viewBox="0 0 800 360"
-                      aria-hidden="true"
+                {syntheticGraph && (
+                  <div className="graph-controls">
+                    <button
+                      aria-label="Reduzir mapa"
+                      onClick={() => setZoom(Math.max(0.7, zoom - 0.1))}
                     >
-                      <defs>
-                        <marker
-                          id="arrow"
-                          viewBox="0 0 10 10"
-                          refX="8"
-                          refY="5"
-                          markerWidth="5"
-                          markerHeight="5"
-                          orient="auto"
-                        >
-                          <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" />
-                        </marker>
-                      </defs>
-                      {topologyEdges.map(([from, to]) => {
-                        const a = topologyNodes.find((n) => n.id === from)!,
-                          b = topologyNodes.find((n) => n.id === to)!;
-                        return (
-                          <path
-                            key={from + to}
-                            d={`M ${a.x + 195} ${a.y + 31} C ${a.x + 235} ${a.y + 31}, ${b.x - 35} ${b.y + 31}, ${b.x} ${b.y + 31}`}
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.5"
-                            markerEnd="url(#arrow)"
-                          />
-                        );
-                      })}
-                    </svg>
-                    {topologyNodes.map((n) => (
-                      <button
-                        style={{ left: n.x, top: n.y }}
-                        key={n.id}
-                        className={
-                          "graph-node " + (node.id === n.id ? "selected" : "")
-                        }
-                        onClick={() => setNode(n)}
+                      −
+                    </button>
+                    <button
+                      onClick={() => setZoom(1)}
+                      aria-label="Restaurar zoom"
+                    >
+                      {Math.round(zoom * 100)}%
+                    </button>
+                    <button
+                      aria-label="Ampliar mapa"
+                      onClick={() => setZoom(Math.min(1.3, zoom + 0.1))}
+                    >
+                      +
+                    </button>
+                  </div>
+                )}
+              </div>
+              {syntheticGraph ? (
+                <>
+                  <div className="graph-viewport">
+                    <div
+                      className="graph-canvas"
+                      style={{
+                        transform: `scale(${zoom})`,
+                        transformOrigin: "top left",
+                      }}
+                    >
+                      <svg
+                        className="graph-wires"
+                        viewBox="0 0 800 360"
+                        aria-hidden="true"
                       >
-                        <span
+                        <defs>
+                          <marker
+                            id="arrow"
+                            viewBox="0 0 10 10"
+                            refX="8"
+                            refY="5"
+                            markerWidth="5"
+                            markerHeight="5"
+                            orient="auto"
+                          >
+                            <path
+                              d="M 0 0 L 10 5 L 0 10 z"
+                              fill="currentColor"
+                            />
+                          </marker>
+                        </defs>
+                        {topologyEdges.map(([from, to]) => {
+                          const a = topologyNodes.find((n) => n.id === from)!,
+                            b = topologyNodes.find((n) => n.id === to)!;
+                          return (
+                            <path
+                              key={from + to}
+                              d={`M ${a.x + 195} ${a.y + 31} C ${a.x + 235} ${a.y + 31}, ${b.x - 35} ${b.y + 31}, ${b.x} ${b.y + 31}`}
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.5"
+                              markerEnd="url(#arrow)"
+                            />
+                          );
+                        })}
+                      </svg>
+                      {topologyNodes.map((n) => (
+                        <button
+                          style={{ left: n.x, top: n.y }}
+                          key={n.id}
                           className={
-                            "node-icon " +
-                            (n.stack === "Spring" ? "spring" : "dotnet")
+                            "graph-node " + (node.id === n.id ? "selected" : "")
                           }
+                          onClick={() => setNode(n)}
                         >
-                          <Code2 size={17} />
-                        </span>
-                        <span>
-                          <strong>{n.label}</strong>
-                          <small>
-                            {n.stack} · {n.squad}
-                          </small>
-                        </span>
-                        {n.id === "checkout" && (
-                          <span className="entry-label">ENTRADA</span>
-                        )}
-                      </button>
-                    ))}
-                    <div className="graph-external">
-                      <Globe2 size={15} />
-                      <span>Gateway de pagamento</span>
-                      <Badge tone="amber">Destino a confirmar</Badge>
+                          <span
+                            className={
+                              "node-icon " +
+                              (n.stack === "Spring" ? "spring" : "dotnet")
+                            }
+                          >
+                            <Code2 size={17} />
+                          </span>
+                          <span>
+                            <strong>{n.label}</strong>
+                            <small>
+                              {n.stack} · {n.squad}
+                            </small>
+                          </span>
+                          {n.id === "checkout" && (
+                            <span className="entry-label">ENTRADA</span>
+                          )}
+                        </button>
+                      ))}
+                      <div className="graph-external">
+                        <Globe2 size={15} />
+                        <span>Gateway de pagamento</span>
+                        <Badge tone="amber">Destino a confirmar</Badge>
+                      </div>
                     </div>
                   </div>
+                  <div className="graph-legend">
+                    <span>
+                      <i className="spring-dot" />
+                      Spring Boot
+                    </span>
+                    <span>
+                      <i className="dotnet-dot" />
+                      .NET / C#
+                    </span>
+                    <span>
+                      <i className="legend-line" />
+                      Chamada HTTP de exemplo
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div className="mapping-summary">
+                  <Network size={36} />
+                  <h3>Exemplo de mapeamento</h3>
+                  <p>
+                    O exemplo “Finalização de compra” apresenta o mapa
+                    ilustrativo completo.
+                  </p>
                 </div>
-                <div className="graph-legend">
-                  <span>
-                    <i className="spring-dot" />
-                    Spring Boot
-                  </span>
-                  <span>
-                    <i className="dotnet-dot" />
-                    .NET / C#
-                  </span>
-                  <span>
-                    <i className="legend-line" />
-                    Chamada HTTP de exemplo
-                  </span>
-                </div>
-              </>
-            ) : !demo && artifact ? (
-              <CanonicalMap manifest={artifact} analysisId={j.id} />
-            ) : (
-              <div className="mapping-summary">
-                <Network size={36} />
-                <h3>
-                  {demo
-                    ? "Exemplo de mapeamento"
-                    : artifact
-                      ? "Manifesto disponível"
-                      : "Aguardando o resultado estrutural"}
-                </h3>
+              )}
+              <div className="graph-foot">
+                <ShieldCheck size={15} />
+                {demo
+                  ? "Representação sintética para demonstrar a experiência."
+                  : "A ausência de uma dependência no mapa não prova sua inexistência."}
+              </div>
+            </section>
+            <aside className="panel node-panel">
+              <div className="section-eyebrow">
+                {syntheticGraph ? "SERVIÇO SELECIONADO" : "CONTEXTO"}
+              </div>
+              <div className="node-detail-icon">
+                <Code2 size={24} />
+              </div>
+              <h3>{syntheticGraph ? node.label : j.name}</h3>
+              <Badge tone="blue">{syntheticGraph ? node.stack : j.tier}</Badge>
+              <p>
+                {syntheticGraph
+                  ? node.detail
+                  : j.description ||
+                    "Análise do repositório na revisão informada."}
+              </p>
+              <hr />
+              <dl>
+                <dt>{syntheticGraph ? "Squad" : "Repositório"}</dt>
+                <dd>{syntheticGraph ? node.squad : j.repository}</dd>
+                <dt>{syntheticGraph ? "Evidência de exemplo" : "Revisão"}</dt>
+                <dd>
+                  <code>
+                    {syntheticGraph ? node.evidence : j.revision.slice(0, 12)}
+                  </code>
+                </dd>
+              </dl>
+              <div className="node-note">
+                <Eye size={16} />
                 <p>
                   {demo
-                    ? "Esta jornada demonstra os estados e os artefatos da interface. O mapa interativo completo está no exemplo “Finalização de compra”."
-                    : artifact
-                      ? "Consulte os dados de evidência na aba Evidências ou exporte o manifesto original. A visualização gráfica de manifestos reais será expandida conforme os contratos do motor."
-                      : "As evidências e os artefatos aparecerão quando o motor concluir a análise."}
+                    ? "Evidência ilustrativa. Não corresponde a um arquivo consultado."
+                    : "Verifique limitações e fatos não resolvidos no manifesto."}
                 </p>
-                <div className="stack-list">
-                  {j.stacks.map((s) => (
-                    <Badge key={s} tone="blue">
-                      {s}
-                    </Badge>
-                  ))}
-                </div>
               </div>
-            )}
-            <div className="graph-foot">
-              <ShieldCheck size={15} />
-              {demo
-                ? "Representação sintética para demonstrar a experiência."
-                : "A ausência de uma dependência no mapa não prova sua inexistência."}
-            </div>
-          </section>
-          <aside className="panel node-panel">
-            <div className="section-eyebrow">
-              {syntheticGraph ? "SERVIÇO SELECIONADO" : "CONTEXTO"}
-            </div>
-            <div className="node-detail-icon">
-              <Code2 size={24} />
-            </div>
-            <h3>{syntheticGraph ? node.label : j.name}</h3>
-            <Badge tone="blue">{syntheticGraph ? node.stack : j.tier}</Badge>
-            <p>
-              {syntheticGraph
-                ? node.detail
-                : j.description ||
-                  "Análise do repositório na revisão informada."}
-            </p>
-            <hr />
-            <dl>
-              <dt>{syntheticGraph ? "Squad" : "Repositório"}</dt>
-              <dd>{syntheticGraph ? node.squad : j.repository}</dd>
-              <dt>{syntheticGraph ? "Evidência de exemplo" : "Revisão"}</dt>
-              <dd>
-                <code>
-                  {syntheticGraph ? node.evidence : j.revision.slice(0, 12)}
-                </code>
-              </dd>
-            </dl>
-            <div className="node-note">
-              <Eye size={16} />
-              <p>
-                {demo
-                  ? "Evidência ilustrativa. Não corresponde a um arquivo consultado."
-                  : "Verifique limitações e fatos não resolvidos no manifesto."}
-              </p>
-            </div>
-          </aside>
-        </div>
-      ) : tab === "evidencias" ? (
-        <section className="panel evidence-panel">
-          <div className="panel-heading">
-            <div>
-              <h2>Evidências do mapeamento</h2>
-              <p>
-                {demo
-                  ? "Referências sintéticas usadas no exemplo visual."
-                  : "Dados originais do manifesto retornado pelo motor."}
-              </p>
-            </div>
-            <Badge tone="blue">{demo ? "Exemplo" : "Fonte: motor"}</Badge>
+            </aside>
           </div>
-          {syntheticGraph ? (
-            topologyNodes.map((n, i) => (
-              <div className="evidence-row" key={n.id}>
-                <span className="evidence-number">
-                  {String(i + 1).padStart(2, "0")}
-                </span>
-                <div>
-                  <strong>{n.label}</strong>
-                  <p>{n.detail}</p>
-                  <code>{n.evidence}</code>
-                </div>
-                <Badge>{n.stack}</Badge>
-              </div>
-            ))
-          ) : artifact ? (
-            <pre className="code-preview">
-              {JSON.stringify(artifact.evidence || artifact, null, 2)}
-            </pre>
-          ) : (
-            <div className="empty">
-              <FileText />
-              <h3>
-                {demo
-                  ? "Sem evidências reais neste exemplo"
-                  : "Evidências ainda indisponíveis"}
-              </h3>
-              <p>
-                {demo
-                  ? "Abra Finalização de compra para explorar o exemplo detalhado."
-                  : "Aguarde a conclusão e confirme sua permissão para acessar artefatos."}
-              </p>
-            </div>
-          )}
-        </section>
-      ) : tab === "revisao" ? (
-        <section className="panel review-panel">
-          <div className="panel-heading">
-            <div>
-              <h2>O que ainda precisa de contexto</h2>
-              <p>
-                As incertezas ficam explícitas para orientar a revisão humana.
-              </p>
-            </div>
-          </div>
-          {demo && gaps ? (
-            <>
-              <div className="review-item">
-                <CircleAlert size={22} />
-                <div>
-                  <h3>Destino do provedor de pagamento</h3>
-                  <p>
-                    O endereço é resolvido por configuração em execução.
-                    Confirme o provedor e o ambiente.
-                  </p>
-                  <code>PaymentGateway:BaseUrl · exemplo sintético</code>
-                </div>
-                <Badge tone="amber">A confirmar</Badge>
-              </div>
-              {gaps > 1 && (
-                <div className="review-item">
-                  <CircleAlert size={22} />
-                  <div>
-                    <h3>Consumidor do evento de confirmação</h3>
-                    <p>
-                      A associação entre a publicação e o consumidor depende de
-                      configuração externa.
-                    </p>
-                    <code>order.confirmed · exemplo sintético</code>
-                  </div>
-                  <Badge tone="amber">A confirmar</Badge>
-                </div>
-              )}
-              <label className="review-check">
-                <input
-                  type="checkbox"
-                  checked={reviewed}
-                  onChange={(e) => setReviewed(e.target.checked)}
-                />
-                <span>
-                  Marcar como revisado nesta demonstração{" "}
-                  <small>Não aprova mudanças nem altera o manifesto.</small>
-                </span>
-              </label>
-            </>
-          ) : artifact ? (
-            <pre className="code-preview">
-              {JSON.stringify(
-                {
-                  limitations: artifact.limitations,
-                  unresolvedFacts: artifact.unresolvedFacts,
-                  warnings: artifact.warnings,
-                },
-                null,
-                2,
-              )}
-            </pre>
-          ) : (
-            <div className="empty">
-              <CheckCheck size={30} />
-              <h3>
-                {demo
-                  ? "Nenhuma pendência no exemplo"
-                  : "Revisão disponível após a análise"}
-              </h3>
-              <p>
-                {demo
-                  ? "Isso não constitui validação de prontidão operacional."
-                  : "Os fatos não resolvidos serão preservados no manifesto."}
-              </p>
-            </div>
-          )}
-        </section>
+        )
       ) : (
         <section className="panel artifacts-panel">
           <div className="panel-heading">

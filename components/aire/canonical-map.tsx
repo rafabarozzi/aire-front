@@ -53,7 +53,7 @@ export function CanonicalMap({
         role: "resource",
       })),
     ];
-  const shown = all.slice(0, 24),
+  const shown = all,
     node = shown.find((n) => n.id === selected) || shown[0],
     ids = new Set(shown.map((n) => n.id));
   const edges = m.dependencies.filter((d) => ids.has(d.from) && ids.has(d.to));
@@ -82,12 +82,6 @@ export function CanonicalMap({
         </span>
         <span>{m.dependencies.length} dependências</span>
       </div>
-      {all.length > 24 && (
-        <div className="inline-demo">
-          Exibindo 24 de {all.length} elementos. O manifesto exportado preserva
-          o grafo completo.
-        </div>
-      )}
       <div className="graph-viewport" style={{ height: Math.min(height, 440) }}>
         <div className="graph-canvas" style={{ height }}>
           <svg
@@ -167,7 +161,7 @@ export function CanonicalMap({
             execução.
           </small>
           <div className="canonical-relations">
-            {related.slice(0, 12).map((d) => (
+            {related.map((d) => (
               <div key={d.id}>
                 <code>{all.find((n) => n.id === d.from)?.name}</code>
                 <ArrowRight size={12} />
@@ -180,7 +174,7 @@ export function CanonicalMap({
               </div>
             ))}
           </div>
-          {evidence.slice(0, 8).map((e) => (
+          {evidence.map((e) => (
             <div className="canonical-reference" key={e.id}>
               <FileText size={13} />
               <code>

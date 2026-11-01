@@ -15,3 +15,12 @@ Ainda exigem ambiente real: login Microsoft/Google, claims/grupos do diretório,
 A suíte cobre cadastro/edição/exclusão de repositórios e credencial, criptografia em repouso, respostas sem segredo, isolamento entre tenants, bloqueio de fallback após exclusão, permissões, CSRF, conflitos de revisão e migração da política admin. Erros do GitHub são diferenciados sem refletir corpo ou URLs de autorização do provedor.
 
 46 testes passaram após a alteração. A interface foi exercitada com dados sintéticos e respostas de API simuladas: cadastro com erro de credencial ausente, instruções de correção, cadastro/edição/exclusão da credencial, cadastro/edição/exclusão de repositório, validação, confirmação de exclusão e digitação sem perda de foco. O formulário de edição abre com o campo de token vazio. O fixture temporário foi removido antes do build de produção. Esses testes não equivalem a validar a credencial real do cliente ou a executar o motor.
+
+
+## 2026-11-01 — mapa e relatório unificados
+
+- 64 testes unitários passaram, incluindo extração integral de macrofluxos, preservação do restante do Markdown e recusa de conteúdo ativo em diagramas.
+- TypeScript e build de produção Next passaram; os novos módulos passam no ESLint. O lint global mantém ocorrências preexistentes em outros componentes.
+- Verificação em Chromium local, com respostas da API simuladas e relatório real de regressão: duas abas, 80 elementos gráficos (passos, decisões e legenda), rótulos presentes, zoom, tela cheia, artefatos e falha de carregamento com nova tentativa.
+- Layout de 390 px sem transbordamento horizontal da página. O mapa e as tabelas extensas têm rolagem própria.
+- Teste visual não autentica no SSO de produção nem substitui a nova análise na Contabo. Artefatos existentes permanecem imutáveis; Atualizar recarrega o estado e o relatório, não chama novamente o motor.
