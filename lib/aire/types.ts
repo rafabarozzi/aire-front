@@ -44,6 +44,7 @@ export type Session = {
   };
 };
 export type Journey = {
+  collectorId?: string;
   sourceSubdirectory?: string;
   journeyKey?: string;
   versionCount?: number;

@@ -247,3 +247,41 @@ test("unconfigured container keeps unauthenticated journey API closed with 401",
   );
   assert.equal(response.status, 401);
 });
+
+test("explicit reanalysis creates one new version and repeating it reuses the active version", async () => {
+  const j = job();
+  await saveJourney("lab", j);
+  let calls = 0;
+  globalThis.fetch = async () => {
+    calls++;
+    return Response.json({
+      analysis_id: "22222222-2222-4222-8222-222222222222",
+      created_at: "2026-11-02T10:00:00Z",
+    });
+  };
+  const payload = {
+    name: j.name,
+    tier: j.tier,
+    endpoint: j.endpoint,
+    repository: j.repository,
+    revision: j.revision,
+    reanalyze: true,
+    collectorId: "55555555-5555-4555-8555-555555555555",
+  };
+  const first = await api(
+    await req(customer, "journeys", member, customer, "POST", payload),
+    ["journeys"],
+  );
+  assert.equal(first.status, 202);
+  const created = (await first.json()) as Journey;
+  assert.equal(created.collectorId, payload.collectorId);
+  assert.equal(calls, 1);
+  const again = await api(
+    await req(customer, "journeys", member, customer, "POST", payload),
+    ["journeys"],
+  );
+  assert.equal(again.status, 200);
+  assert.equal(calls, 1);
+  assert.equal((await listJourneys("lab")).length, 1);
+  assert.equal((await journeyHistory("lab", j)).length, 2);
+});

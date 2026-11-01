@@ -31,7 +31,7 @@ Uma jornada é identificada por organização, repositório (sem diferença entr
 
 A lista reúne análises antigas da mesma identidade sem excluir seus arquivos. Uma revisão nova cria outra versão. A mesma revisão concluída e criticidade retorna a análise existente, sem chamada à IA; a opção de reanalisar permite uma nova versão explícita. Enquanto uma análise estiver em andamento, a solicitação abre essa análise. Um bloqueio em disco serializa a preparação da mesma jornada entre processos. Depois de uma interrupção abrupta, verifique que não há preparação ativa antes de remover um arquivo residual de `/data/<tenant>/locks`.
 
-O seletor de histórico abre MD/JSON da análise escolhida. Relatórios antigos são preservados: reanalise para receber o novo formato. Análises de versões anteriores que não registravam subdiretório são agrupadas como raiz; não é possível inventar o subdiretório original.
+O botão “Reanalisar esta revisão” na jornada usa o commit selecionado e preserva as versões anteriores. Para mapear um commit novo, selecione o repositório no assistente e valide a branch/commit desejado. O seletor de histórico abre MD/JSON da análise escolhida. Relatórios antigos são preservados: reanalise para receber o novo formato. Análises de versões anteriores que não registravam subdiretório são agrupadas como raiz; não é possível inventar o subdiretório original.
 
 ## Billing e evolução
 

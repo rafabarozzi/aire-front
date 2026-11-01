@@ -301,6 +301,7 @@ export async function api(request: Request, path: string[]) {
               );
             const journey: Journey = {
               id: created.analysis_id,
+              collectorId: input.collectorId,
               name: input.name,
               tier: input.tier,
               endpoint: input.endpoint,
@@ -357,6 +358,7 @@ export async function api(request: Request, path: string[]) {
               );
             j = {
               id: created.analysis_id,
+              collectorId: input.collectorId,
               name: input.name,
               tier: input.tier,
               endpoint: input.endpoint,

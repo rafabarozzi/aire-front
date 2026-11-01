@@ -3758,3 +3758,20 @@ hr {
   padding: 12px 0;
   font-weight: 600;
 }
+/* Long version labels must stay within the metadata panel on narrow screens. */
+.version-select {
+  min-width: 0;
+  max-width: 100%;
+}
+.version-select select {
+  min-width: 0;
+}
+
+.heading-actions {
+  flex-wrap: wrap;
+}
+@media (max-width: 680px) {
+  .heading-actions > .button {
+    flex: 1 1 145px;
+  }
+}

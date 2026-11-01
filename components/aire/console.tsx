@@ -513,6 +513,19 @@ export function Console() {
               journey={selected}
               demo={demo}
               canExport={can("artifacts:read")}
+              canMap={can("journeys:create")}
+              reanalyzed={(next) => {
+                setSelected(next);
+                setJourneys((old) => [
+                  next,
+                  ...old.filter((j) => journeyKey(j) !== journeyKey(next)),
+                ]);
+                setToast(
+                  next.reused
+                    ? "Análise em andamento aberta."
+                    : "Nova versão solicitada. O histórico foi preservado.",
+                );
+              }}
               back={() => setSelected(null)}
               notify={setToast}
               updated={(j) => {
@@ -1765,6 +1778,8 @@ function JourneyDetail({
   journey: j,
   demo,
   canExport,
+  canMap,
+  reanalyzed,
   back,
   notify,
   updated,
@@ -1772,6 +1787,8 @@ function JourneyDetail({
   journey: Journey;
   demo: boolean;
   canExport: boolean;
+  canMap: boolean;
+  reanalyzed: (j: Journey) => void;
   back: () => void;
   notify: (s: string) => void;
   updated: (j: Journey) => void;
@@ -1790,6 +1807,30 @@ function JourneyDetail({
         .then(setHistory)
         .catch((e) => setError(e.message));
   }, [demo, j.id]);
+  async function reanalyzeCurrent() {
+    setRefreshing(true);
+    setError("");
+    try {
+      const next = await request<Journey>("journeys", {
+        method: "POST",
+        body: JSON.stringify({
+          name: j.name,
+          tier: j.tier,
+          endpoint: j.endpoint,
+          repository: j.repository,
+          revision: j.revision,
+          sourceSubdirectory: j.sourceSubdirectory || "",
+          ...(j.collectorId ? { collectorId: j.collectorId } : {}),
+          reanalyze: true,
+        }),
+      });
+      reanalyzed(next);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setRefreshing(false);
+    }
+  }
   async function refresh() {
     setRefreshing(true);
     setError("");
@@ -1889,6 +1930,19 @@ function JourneyDetail({
           </div>
         </div>
         <div className="heading-actions">
+          {!demo && canMap && (
+            <button
+              className="button secondary"
+              title="Reanalisar este commit com o motor atualizado, criando outra versão e consumindo IA."
+              disabled={
+                refreshing || !["COMPLETED", "FAILED"].includes(j.status)
+              }
+              onClick={reanalyzeCurrent}
+            >
+              <Workflow size={16} />
+              Reanalisar esta revisão
+            </button>
+          )}
           {!demo && (
             <button
               className="button secondary"
