@@ -8,6 +8,8 @@ import {
   seal,
   cookie,
   SESSION_COOKIE,
+  FLOW_COOKIE,
+  ONBOARDING_COOKIE,
   sessionResponse,
 } from "../lib/server/session.ts";
 import { portal } from "../lib/server/portal.ts";
@@ -157,6 +159,68 @@ test("host binding rejects cookie replay, forged forwarded host and unknown port
   csrf.headers.set("origin", origin);
   assert.equal((await api(csrf, ["journeys"])).status, 403);
 });
+
+for (const mode of ["legacy", "admin", "customer"] as const) {
+  test(`logout clears only host-local authentication cookies in the ${mode} portal`, async () => {
+    if (mode === "legacy") process.env.AIRE_PORTAL_MODE = "legacy";
+    const base = mode === "customer" ? customer : origin;
+    const response = await api(
+      await req(
+        base,
+        "logout",
+        mode === "customer" ? member : operator,
+        base,
+        "POST",
+      ),
+      ["logout"],
+    );
+    assert.equal(response.status, 204);
+    assert.equal(response.headers.get("cache-control"), "no-store");
+    const expired = response.headers.getSetCookie();
+    assert.equal(expired.length, 3);
+    for (const name of [SESSION_COOKIE, FLOW_COOKIE, ONBOARDING_COOKIE]) {
+      const value = expired.find((c) => c.startsWith(name + "="));
+      assert.ok(value, `${name} must be removed`);
+      assert.match(value, /Max-Age=0/);
+      assert.match(value, /Path=\//);
+      assert.match(value, /HttpOnly; Secure; SameSite=Lax/);
+      assert.doesNotMatch(value, /Domain=/i);
+    }
+    const cleared = new Request(base + "/api/console/session");
+    assert.equal((await sessionResponse(cleared)).authenticated, false);
+    const protectedPath = mode === "customer" ? "journeys" : "platform";
+    assert.equal((await api(cleared, [protectedPath])).status, 401);
+  });
+}
+
+test("logout works after session expiry, but rejects cross-origin and GET requests", async () => {
+  for (const base of [origin, customer]) {
+    const expired = new Request(base + "/api/console/logout", {
+      method: "POST",
+      headers: { origin: base, cookie: `${SESSION_COOKIE}=expired` },
+    });
+    assert.equal((await api(expired, ["logout"])).status, 204);
+    for (const foreignOrigin of [
+      "https://evil.example",
+      base === origin ? customer : origin,
+      "",
+    ]) {
+      const foreign = new Request(base + "/api/console/logout", {
+        method: "POST",
+        headers: { origin: foreignOrigin },
+      });
+      const denied = await api(foreign, ["logout"]);
+      assert.equal(denied.status, 403);
+      assert.equal(denied.headers.get("set-cookie"), null);
+    }
+    const get = await api(new Request(base + "/api/console/logout"), [
+      "logout",
+    ]);
+    assert.equal(get.headers.get("set-cookie"), null);
+    assert.notEqual(get.status, 204);
+  }
+});
+
 test("legacy duplicates collapse without deleting history; endpoint method and subdirectory separate journeys", async () => {
   const first = job(),
     second = {

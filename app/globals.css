@@ -473,6 +473,14 @@ hr {
 .notification-wrap {
   position: relative;
 }
+.logout-button {
+  flex-shrink: 0;
+  min-height: 44px;
+}
+.logout-button.compact {
+  padding: 8px 12px;
+  font-size: 14px;
+}
 .notification-popover {
   position: absolute;
   right: -40px;

@@ -1,5 +1,6 @@
 "use client";
 import { EnterpriseConsole } from "./enterprise-console";
+import { LogoutButton } from "./logout-button";
 import { journeyKey } from "@/lib/aire/journey-identity";
 import { useEffect, useState, useRef, type ReactNode } from "react";
 import {
@@ -42,7 +43,6 @@ import {
   X,
   CircleAlert,
   CheckCircle2,
-  LogOut,
   Monitor,
   Eye,
   Pencil,
@@ -505,6 +505,7 @@ export function Console() {
               </span>
               <ChevronDown size={13} />
             </button>
+            {!demo && <LogoutButton compact onError={setToast} />}
           </div>
         </header>
         <main id="content" className="main-content">
@@ -3179,21 +3180,6 @@ function Settings({
   previewLogin: () => void;
   notify: (s: string) => void;
 }) {
-  const [signingOut, setSigningOut] = useState(false);
-  async function logout() {
-    setSigningOut(true);
-    try {
-      const r = await fetch("/api/console/logout", {
-        method: "POST",
-        credentials: "same-origin",
-      });
-      if (!r.ok) throw new Error();
-      location.reload();
-    } catch {
-      notify("Não foi possível encerrar a sessão. Tente novamente.");
-      setSigningOut(false);
-    }
-  }
   return (
     <>
       <div className="page-heading">
@@ -3259,14 +3245,7 @@ function Settings({
               Conhecer a tela de login
             </button>
           ) : (
-            <button
-              className="button secondary"
-              onClick={logout}
-              disabled={signingOut}
-            >
-              <LogOut size={16} />
-              Encerrar sessão
-            </button>
+            <LogoutButton onError={notify} />
           )}
         </section>
         <section className="panel settings-card">

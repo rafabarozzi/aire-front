@@ -6,6 +6,8 @@
 
 Cada organização tem `publicOrigin`, por exemplo `https://northeia-lab.northeia.com`. As sessões são criptografadas, vinculadas à origem e usam cookies `__Host-` sem Domain. O servidor resolve o tenant pelo Host cadastrado e confere a identidade do workspace; `X-Forwarded-Host` não autoriza acesso. Caddy deve preservar Host. Domínios desconhecidos, tenants suspensos, sessão de outro domínio e administração de plataforma no domínio cliente são recusados.
 
+O botão **Sair** fica no cabeçalho, ao lado do perfil, também no celular e nas páginas administrativas. Ele encerra a sessão AIRE do portal atual e retorna ao login. A ação limpa os cookies de sessão, transação de login e diagnóstico de onboarding, sem encerrar a conta Microsoft/Google nos demais aplicativos. Se a solicitação falhar, o portal informa o erro e permite tentar novamente.
+
 O modo legado continua disponível durante a migração. Não ative o modo multi antes de registrar o operador e preparar o portal dos clientes.
 
 O login não pede um identificador de workspace. No subdomínio do cliente, a origem seleciona a conexão SSO e o servidor valida o vínculo da identidade autenticada. No portal legado compartilhado, o provedor configurado autentica o usuário e o vínculo único por emissor + subject/Object ID ou grupo identifica a organização. Organizações com outro diretório/aplicativo SSO devem usar seu próprio portal; o servidor não descobre um diretório arbitrário a partir do e-mail. Vínculos ambíguos são recusados e o usuário deve acessar o subdomínio da organização. Links legados com `?workspace=` continuam aceitos sob as mesmas verificações.

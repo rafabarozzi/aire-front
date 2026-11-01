@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, type FormEvent } from "react";
 import { request } from "@/lib/aire/client";
+import { LogoutButton } from "./logout-button";
 import type { Session, Journey } from "@/lib/aire/types";
 import type { Tenant } from "@/lib/server/config";
 
@@ -252,17 +253,7 @@ export function EnterpriseConsole({
             Tema {dark ? "claro" : "escuro"}
           </button>
           {session?.authenticated && (
-            <button
-              className="button secondary"
-              onClick={() =>
-                operation(async () => {
-                  await request("logout", { method: "POST" });
-                  location.href = "/";
-                })
-              }
-            >
-              Sair
-            </button>
+            <LogoutButton onError={setError} />
           )}
         </nav>
       </header>

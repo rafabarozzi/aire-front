@@ -1,6 +1,13 @@
 import { z } from "zod";
 import { AppError } from "./config.ts";
-import { checkOrigin, context, cookie, SESSION_COOKIE } from "./session.ts";
+import {
+  checkOrigin,
+  context,
+  cookie,
+  SESSION_COOKIE,
+  FLOW_COOKIE,
+  ONBOARDING_COOKIE,
+} from "./session.ts";
 import { connectionsApi } from "./connections-api.ts";
 import { platformApi } from "./platform.ts";
 import { authorizedRepositories } from "./connections.ts";
@@ -155,14 +162,12 @@ export async function api(request: Request, path: string[]) {
         return json({ revoked: true });
       }
     }
-    if (path[0] === "logout" && request.method === "POST")
-      return new Response(null, {
-        status: 204,
-        headers: {
-          "Set-Cookie": cookie(SESSION_COOKIE, "", 0),
-          "Cache-Control": "no-store",
-        },
-      });
+    if (path.join("/") === "logout" && request.method === "POST") {
+      const headers = new Headers({ "Cache-Control": "no-store" });
+      for (const name of [SESSION_COOKIE, FLOW_COOKIE, ONBOARDING_COOKIE])
+        headers.append("Set-Cookie", cookie(name, "", 0));
+      return new Response(null, { status: 204, headers });
+    }
     if (
       path.join("/") === "repositories/validate" &&
       request.method === "POST"
