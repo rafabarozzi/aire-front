@@ -4001,3 +4001,23 @@ hr {
     position: static;
   }
 }
+
+.setup-page { min-height: 100vh; padding: 28px 20px; background: var(--bg); color: var(--text); font-size: 17px; line-height: 1.6; }
+.setup-page header {max-width: 960px; margin: 0 auto 28px; display:flex; align-items:center; justify-content:space-between;gap:16px;}
+.setup-page header strong {font-size:28px;color:var(--ink);}
+.setup-page header small {font-size:13px;display:block;}
+.setup-card {max-width:800px;margin:auto;padding:clamp(22px,4vw,48px);}
+.setup-card h1 {font-size:clamp(26px,4vw,36px);line-height:1.25;color:var(--ink);margin:12px 0 18px;}
+.setup-card h2 {font-size:23px;color:var(--ink);margin-bottom:12px;}
+.setup-eyebrow {color:var(--blue);font-weight:600;}
+.setup-form {display:grid;gap:22px;margin:28px 0;}
+.setup-card .field input,.setup-card .field select {min-width:0;width:100%;}
+.setup-card p {margin-bottom:16px;}
+.setup-card code {display:block;overflow-wrap:anywhere;background:var(--surface-soft);padding:12px;border-radius:8px;}
+.setup-card details {border:1px solid var(--border);padding:16px;border-radius:10px;}
+.setup-card summary {cursor:pointer;font-weight:600;}
+.setup-stage {border-top:1px solid var(--border);padding:24px 0;}
+.setup-steps {padding:20px 20px 20px 40px;background:var(--surface-soft);border-radius:10px;margin-top:24px;}
+.setup-alert {border:1px solid var(--amber);background:var(--amber-bg);padding:16px;border-radius:10px;margin:20px 0;}
+.setup-page footer {text-align:center;margin:28px;color:var(--muted);}
+.setup-card .button {white-space:normal;}

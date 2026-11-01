@@ -1,7 +1,13 @@
 import { portal } from "./portal.ts";
 import { isPlatformAdmin } from "./platform-identity.ts";
 import * as oidc from "openid-client";
-import { AppError, membership, tenants, type Identity } from "./config.ts";
+import {
+  AppError,
+  membership,
+  tenants,
+  type Identity,
+  type Tenant,
+} from "./config.ts";
 import {
   seal,
   unseal,
@@ -15,10 +21,15 @@ import {
 export function identityConnection(
   provider: "google" | "microsoft",
   workspace?: string,
+  override?: Tenant,
 ) {
-  const tenant = workspace
-    ? tenants().find((t) => t.id === workspace && t.enabled !== false && t.sso)
-    : undefined;
+  const tenant =
+    override ||
+    (workspace
+      ? tenants().find(
+          (t) => t.id === workspace && t.enabled !== false && t.sso,
+        )
+      : undefined);
   if (workspace && !tenant)
     throw new AppError(403, "workspace", "Workspace não autorizado.");
   const prefix = provider === "google" ? "AIRE_GOOGLE" : "AIRE_MICROSOFT";
@@ -72,8 +83,9 @@ export function validatedIdentity(
   provider: "google" | "microsoft",
   claims: Record<string, unknown>,
   workspace?: string,
+  override?: Tenant,
 ): Identity {
-  const connection = identityConnection(provider, workspace);
+  const connection = identityConnection(provider, workspace, override);
   if (claims.iss !== connection.issuer || typeof claims.sub !== "string")
     throw new Error("Identity issuer mismatch");
   if (

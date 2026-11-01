@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState, type FormEvent } from "react";
 import { request } from "@/lib/aire/client";
+import { OnboardingAdmin } from "./onboarding-admin";
 import { LogoutButton } from "./logout-button";
 import type { Session, Journey } from "@/lib/aire/types";
 import type { Tenant } from "@/lib/server/config";
@@ -51,6 +52,7 @@ export function EnterpriseConsole({
   const [session, setSession] = useState<Session | null>(null),
     [error, setError] = useState(""),
     [message, setMessage] = useState("");
+  const [onboardingMode, setOnboardingMode] = useState("invite");
   const [busy, setBusy] = useState(false),
     [dark, setDark] = useState(false);
   const [registry, setRegistry] = useState<{
@@ -151,7 +153,7 @@ export function EnterpriseConsole({
         ...(value("publicOrigin")
           ? { publicOrigin: value("publicOrigin") }
           : {}),
-        enabled: f.get("enabled") === "on",
+        enabled: !value("inviteEmail") && f.get("enabled") === "on",
         sso: {
           ...editing?.sso,
           ...(ms ? { microsoftTenantId: ms } : {}),
@@ -185,7 +187,17 @@ export function EnterpriseConsole({
         body: JSON.stringify({ revision: registry.revision, tenant }),
       });
       await load();
-      setEditing(null);
+      setEditing(tenant);
+      if (value("inviteEmail")) {
+        await request(`platform/${id}/onboarding`, {
+          method: "POST",
+          body: JSON.stringify({ email: value("inviteEmail") }),
+        });
+        setMessage(
+          "Organização salva. Convite aceito pelo provedor de e-mail; acompanhe a entrega no provedor.",
+        );
+        return;
+      }
       setMessage(
         "Organização salva. A ativação exige um motor vinculado ao mesmo cliente.",
       );
@@ -252,9 +264,7 @@ export function EnterpriseConsole({
           >
             Tema {dark ? "claro" : "escuro"}
           </button>
-          {session?.authenticated && (
-            <LogoutButton onError={setError} />
-          )}
+          {session?.authenticated && <LogoutButton onError={setError} />}
         </nav>
       </header>
       <main>
@@ -433,6 +443,40 @@ export function EnterpriseConsole({
                   <h2>
                     {editing ? `Editar ${editing.name}` : "Cadastrar cliente"}
                   </h2>
+                  {!editing && (
+                    <>
+                      <label className="field">
+                        Como configurar o acesso do cliente?
+                        <select
+                          value={onboardingMode}
+                          onChange={(e) => setOnboardingMode(e.target.value)}
+                        >
+                          <option value="invite">
+                            Convidar o cliente para configurar SSO
+                          </option>
+                          <option value="manual">
+                            Cadastrar os dados SSO recebidos do cliente
+                          </option>
+                        </select>
+                      </label>
+                      {onboardingMode === "invite" && (
+                        <label className="field">
+                          E-mail do responsável pelo SSO
+                          <input
+                            name="inviteEmail"
+                            type="email"
+                            required
+                            placeholder="administrador@empresa.com.br"
+                          />
+                          <small>
+                            O cliente receberá um convite para criar seu acesso
+                            temporário e configurar o SSO. A organização será
+                            salva como rascunho.
+                          </small>
+                        </label>
+                      )}
+                    </>
+                  )}
                   <div className="enterprise-grid">
                     <label className="field">
                       Identificador
@@ -467,57 +511,65 @@ export function EnterpriseConsole({
                         SSO.
                       </small>
                     </label>
-                    <label className="field">
-                      Tenant ID do Microsoft Entra
-                      <input
-                        name="microsoft"
-                        defaultValue={editing?.sso?.microsoftTenantId}
-                        placeholder="UUID do diretório do cliente"
-                      />
-                    </label>
-                    <label className="field">
-                      Domínios Google Workspace
-                      <input
-                        name="domains"
-                        defaultValue={editing?.sso?.googleDomains.join(", ")}
-                        placeholder="empresa.com.br"
-                      />
-                    </label>
-                    <label className="field">
-                      Identidade do administrador
-                      <select
-                        name="adminProvider"
-                        defaultValue={admin?.provider || "microsoft"}
-                      >
-                        <option value="microsoft">Microsoft</option>
-                        <option value="google">Google</option>
-                      </select>
-                    </label>
-                    <label className="field">
-                      ID imutável do administrador
-                      <input
-                        name="adminSubject"
-                        defaultValue={admin?.subject}
-                        placeholder="Object ID Microsoft ou subject Google"
-                      />
-                      <small>
-                        Pode ser preenchido após o teste SSO. Sem vínculo ou
-                        grupo autorizado, o usuário não recebe acesso.
-                      </small>
-                    </label>
-                    {(["admin", "engineer", "viewer"] as const).map((role) => (
-                      <label className="field" key={role}>
-                        Grupos Microsoft — {role}
-                        <input
-                          name={"group_" + role}
-                          defaultValue={editing?.groups
-                            .filter((g) => g.role === role)
-                            .map((g) => g.id)
-                            .join(", ")}
-                          placeholder="Object IDs dos grupos, separados por vírgula"
-                        />
-                      </label>
-                    ))}
+                    {(editing || onboardingMode === "manual") && (
+                      <>
+                        <label className="field">
+                          Tenant ID do Microsoft Entra
+                          <input
+                            name="microsoft"
+                            defaultValue={editing?.sso?.microsoftTenantId}
+                            placeholder="UUID do diretório do cliente"
+                          />
+                        </label>
+                        <label className="field">
+                          Domínios Google Workspace
+                          <input
+                            name="domains"
+                            defaultValue={editing?.sso?.googleDomains.join(
+                              ", ",
+                            )}
+                            placeholder="empresa.com.br"
+                          />
+                        </label>
+                        <label className="field">
+                          Identidade do administrador
+                          <select
+                            name="adminProvider"
+                            defaultValue={admin?.provider || "microsoft"}
+                          >
+                            <option value="microsoft">Microsoft</option>
+                            <option value="google">Google</option>
+                          </select>
+                        </label>
+                        <label className="field">
+                          ID imutável do administrador
+                          <input
+                            name="adminSubject"
+                            defaultValue={admin?.subject}
+                            placeholder="Object ID Microsoft ou subject Google"
+                          />
+                          <small>
+                            Pode ser preenchido após o teste SSO. Sem vínculo ou
+                            grupo autorizado, o usuário não recebe acesso.
+                          </small>
+                        </label>
+                        {(["admin", "engineer", "viewer"] as const).map(
+                          (role) => (
+                            <label className="field" key={role}>
+                              Grupos Microsoft — {role}
+                              <input
+                                name={"group_" + role}
+                                defaultValue={editing?.groups
+                                  .filter((g) => g.role === role)
+                                  .map((g) => g.id)
+                                  .join(", ")}
+                                placeholder="Object IDs dos grupos, separados por vírgula"
+                              />
+                            </label>
+                          ),
+                        )}
+                      </>
+                    )}
                     <label className="field">
                       Plano
                       <input
@@ -565,6 +617,7 @@ export function EnterpriseConsole({
                     <input
                       type="checkbox"
                       name="enabled"
+                      disabled={!editing && onboardingMode === "invite"}
                       defaultChecked={editing?.enabled === true}
                     />{" "}
                     Ativar organização e verificar identidade do motor
@@ -580,7 +633,11 @@ export function EnterpriseConsole({
                     className="button primary"
                     type="submit"
                   >
-                    {busy ? "Salvando…" : "Salvar organização"}
+                    {busy
+                      ? "Salvando…"
+                      : !editing && onboardingMode === "invite"
+                        ? "Salvar e enviar convite"
+                        : "Salvar organização"}
                   </button>
                   {editing && (
                     <p>
@@ -595,6 +652,9 @@ export function EnterpriseConsole({
                     </p>
                   )}
                 </form>
+                {editing?.enabled === false && (
+                  <OnboardingAdmin key={editing.id} organization={editing.id} />
+                )}
                 <section className="panel enterprise-section">
                   <h2>Billing por organização</h2>
                   <p>

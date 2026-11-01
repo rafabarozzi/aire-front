@@ -21,7 +21,11 @@ import { isPlatformAdmin } from "./platform-identity.ts";
 import { engine } from "./upstream.ts";
 
 export { isPlatformAdmin } from "./platform-identity.ts";
-async function saveTenant(tenant: Tenant, revision: number, actor: Identity) {
+export async function saveTenant(
+  tenant: Tenant,
+  revision: number,
+  actor: Identity,
+) {
   const root = process.env.AIRE_DATA_DIR || "/data";
   await mkdir(root, { recursive: true, mode: 0o700 });
   let lock;
@@ -79,6 +83,14 @@ export async function platformApi(
       "platform_forbidden",
       "Acesso exclusivo da administração Northeia.",
     );
+  if (path.length === 3 && path[2] === "onboarding") {
+    const { onboardingOperator } = await import("./onboarding.ts");
+    return onboardingOperator(
+      request,
+      path[1],
+      request.method === "POST" ? await body() : undefined,
+    );
+  }
   if (path.join("/") === "platform/billing" && request.method === "GET") {
     const month =
       new URL(request.url).searchParams.get("month") ||
@@ -126,9 +138,10 @@ export async function platformApi(
       );
     const { tenant, revision } = parsed.data;
     if (
-      !tenant.sso ||
       !tenant.plan ||
-      (!tenant.sso.microsoftTenantId && !tenant.sso.googleDomains.length)
+      (tenant.enabled !== false &&
+        (!tenant.sso ||
+          (!tenant.sso.microsoftTenantId && !tenant.sso.googleDomains.length)))
     )
       throw new AppError(
         422,

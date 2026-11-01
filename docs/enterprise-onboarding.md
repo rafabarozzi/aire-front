@@ -36,3 +36,7 @@ A visão do workspace mostra plano e tokens, sem custos internos. A visão North
 Configurações gerenciadas ficam em `/data/managed-tenants.json`, com revisão e gravação atômica. Configuração de ambiente legada continua válida; um cadastro gerenciado com o mesmo ID tem precedência. O operador não pode editar sua própria organização pelo painel para evitar bloqueio acidental. Há log de mudanças em `/data/platform-audit.jsonl`. Use uma instância escritora do front; se houver interrupção durante uma alteração, verifique e remova o lock obsoleto `managed-tenants.lock` somente após garantir que nenhum escritor está ativo.
 
 Não há remoção destrutiva de organizações pela interface: suspenda para interromper novos acessos e preserve os dados até executar o procedimento de retenção contratado. Instâncias de clientes no Atlas compartilham o host; são separados seus tokens, volumes e processos, não o hypervisor.
+
+## Convite para o cliente configurar o SSO
+
+Consulte [Onboarding por convite](customer-invitations.md) para cadastrar um rascunho sem SSO, enviar o convite, acompanhar o acesso temporário e concluir a validação corporativa antes de ativar o motor.
