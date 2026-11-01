@@ -128,6 +128,11 @@ function JourneyDiagram({ source, index }: { source: string; index: number }) {
             Todos os passos do macrofluxo, incluindo ramificações e chamadas
             entre serviços. Use a rolagem para percorrer o mapa.
           </p>
+          <p>
+            Ramos assíncronos continuam o processamento sem bloquear a resposta.
+            Uma fronteira de análise indica até onde o código foi inspecionado;
+            o funcionamento interno desse destino permanece em aberto.
+          </p>
         </div>
         <div className="diagram-controls">
           <button
