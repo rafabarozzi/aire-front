@@ -1,4 +1,6 @@
 "use client";
+import { EnterpriseConsole } from "./enterprise-console";
+import { journeyKey } from "@/lib/aire/journey-identity";
 import { useEffect, useState, useRef, type ReactNode } from "react";
 import {
   Activity,
@@ -290,6 +292,7 @@ export function Console() {
         toggleTheme={toggleTheme}
       />
     );
+  if (session.portal === "admin") return <EnterpriseConsole mode="platform" />;
   return (
     <div className="app-shell">
       <a className="skip-link" href="#content">
@@ -354,6 +357,12 @@ export function Console() {
             />
           )}
         </nav>
+        {can("journeys:read") && (
+          <a className="nav-item" href="/evolution">
+            <Activity />
+            <span>Evolução do ambiente</span>
+          </a>
+        )}
         <div className="nav-label later-label">CICLO DE CONFIABILIDADE</div>
         <nav aria-label="Próximos módulos">
           {[
@@ -421,7 +430,7 @@ export function Console() {
             <strong>Northeia</strong>
             <small>Inteligência para confiar.</small>
           </div>
-          <span className="version">v0.1</span>
+          <span className="version">v{session.version || "0.2.0"}</span>
         </div>
       </aside>
       <div className="main-shell">
@@ -660,11 +669,12 @@ export function Console() {
                 />
                 <Stat
                   icon={<CircleAlert />}
-                  value={
-                    demo ? journeys.reduce((n, j) => n + (j.gaps || 0), 0) : "—"
-                  }
-                  label="Pontos para revisão"
-                  note="Evidências que pedem contexto"
+                  value={journeys.reduce(
+                    (n, j) => n + (j.versionCount || 1),
+                    0,
+                  )}
+                  label="Versões de análise"
+                  note="Histórico de mapeamentos preservado"
                   accent
                 />
                 <Stat
@@ -851,9 +861,9 @@ export function Console() {
                                   )}{" "}
                                   {statusLabels[j.status]}
                                 </span>
-                                {j.gaps ? (
+                                {(j.versionCount || 0) > 1 ? (
                                   <small className="row-gap">
-                                    {j.gaps} para revisão
+                                    {j.versionCount} versões
                                   </small>
                                 ) : null}
                               </td>
@@ -995,13 +1005,18 @@ export function Console() {
           demo={demo}
           close={() => setWizard(false)}
           created={(j) => {
-            setJourneys((old) => [j, ...old]);
+            setJourneys((old) => [
+              j,
+              ...old.filter((x) => journeyKey(x) !== journeyKey(j)),
+            ]);
             setWizard(false);
             setSelected(j);
             setToast(
               demo
                 ? "Simulação criada. Nenhum repositório ou modelo foi acessado."
-                : "Análise enviada ao motor.",
+                : j.reused
+                  ? "Jornada existente aberta. Nenhuma nova análise foi criada."
+                  : "Análise enviada ao motor; o histórico será preservado.",
             );
           }}
         />
@@ -1223,6 +1238,18 @@ function Wizard({
     [tier, setTier] = useState<Tier>("Gold"),
     [endpoint, setEndpoint] = useState(""),
     [subdir, setSubdir] = useState("");
+  const [repositories, setRepositories] = useState<string[]>([]);
+  const [repoSearch, setRepoSearch] = useState("");
+  const [reanalyze, setReanalyze] = useState(false);
+  useEffect(() => {
+    if (demo) {
+      setRepositories(["northeia-lab/commerce-demo"]);
+      return;
+    }
+    request<{ repositories: string[] }>("repositories")
+      .then((r) => setRepositories(r.repositories))
+      .catch((e) => setError(e.message));
+  }, [demo]);
   async function validate() {
     setError("");
     setErrorCode("");
@@ -1276,6 +1303,7 @@ function Wizard({
       repository: connection?.repository,
       revision: connection?.revision,
       sourceSubdirectory: subdir,
+      reanalyze,
     };
     let parsed;
     try {
@@ -1337,6 +1365,25 @@ function Wizard({
         ))}
       </div>
       <div className="wizard-body">
+        {step === 3 && !demo && (
+          <div className="notice">
+            <div>
+              <p>
+                Jornadas existentes são reunidas pelo repositório, endpoint e
+                subdiretório. Uma revisão nova gera uma versão no histórico.
+              </p>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={reanalyze}
+                  onChange={(e) => setReanalyze(e.target.checked)}
+                />{" "}
+                Reanalisar também se este commit já tiver resultado (consome
+                IA).
+              </label>
+            </div>
+          </div>
+        )}
         {demo && (
           <div className="inline-demo">
             <Sparkles size={15} />
@@ -1351,20 +1398,73 @@ function Wizard({
               <p>Conecte o código que o motor vai usar como evidência.</p>
             </div>
             <label className="field">
-              Repositório GitHub
+              Buscar nos repositórios cadastrados
               <input
-                autoComplete="off"
-                disabled={busy}
-                value={repo}
-                onChange={(e) => {
-                  setRepo(e.target.value);
-                  setConnection(null);
-                  setError("");
-                }}
-                placeholder="https://github.com/organizacao/repositorio"
+                aria-label="Buscar repositórios"
+                type="search"
+                value={repoSearch}
+                onChange={(e) => setRepoSearch(e.target.value)}
+                placeholder="Busque por organização ou repositório"
               />
-              <small>URL HTTPS ou organização/repositório.</small>
             </label>
+            <div
+              className="repository-picker"
+              aria-label="Repositórios cadastrados"
+            >
+              {repositories
+                .filter((r) =>
+                  r.toLowerCase().includes(repoSearch.toLowerCase()),
+                )
+                .map((r) => (
+                  <button
+                    type="button"
+                    key={r}
+                    aria-pressed={repo === r}
+                    className={
+                      "repository-option " + (repo === r ? "selected" : "")
+                    }
+                    onClick={() => {
+                      setRepo(r);
+                      setConnection(null);
+                      setError("");
+                    }}
+                  >
+                    <FolderGit2 size={18} />
+                    <span>{r}</span>
+                    {repo === r && <Check size={18} />}
+                  </button>
+                ))}
+              {!repositories.length && (
+                <p>Nenhum repositório cadastrado. Adicione um em Conexões.</p>
+              )}
+              {!!repositories.length &&
+                !repositories.some((r) =>
+                  r.toLowerCase().includes(repoSearch.toLowerCase()),
+                ) && <p>Nenhum repositório corresponde à busca.</p>}
+            </div>
+            <details className="repository-manual">
+              <summary>Informar endereço manualmente</summary>
+              <label className="field">
+                Repositório GitHub
+                <input
+                  autoComplete="off"
+                  disabled={busy}
+                  value={repo}
+                  onChange={(e) => {
+                    setRepo(e.target.value);
+                    setConnection(null);
+                    setError("");
+                  }}
+                  placeholder="https://github.com/organizacao/repositorio"
+                />
+                <small>URL HTTPS ou organização/repositório.</small>
+              </label>
+            </details>
+            {repo && (
+              <p className="selected-repository">
+                Selecionado: <strong>{repo}</strong>
+              </p>
+            )}
             <label className="field">
               Branch ou commit <span className="optional">opcional</span>
               <input
@@ -1683,6 +1783,13 @@ function JourneyDetail({
     [zoom, setZoom] = useState(1),
     [reportRevision, setReportRevision] = useState(0);
   const syntheticGraph = demo && j.id === "demo-checkout";
+  const [history, setHistory] = useState<Journey[]>([]);
+  useEffect(() => {
+    if (!demo)
+      request<Journey[]>(`journeys/${j.id}/history`)
+        .then(setHistory)
+        .catch((e) => setError(e.message));
+  }, [demo, j.id]);
   async function refresh() {
     setRefreshing(true);
     setError("");
@@ -1833,6 +1940,27 @@ function JourneyDetail({
             minute: "2-digit",
           })}
         </span>
+        {!demo && history.length > 0 && (
+          <label className="version-select">
+            Histórico ({history.length}){" "}
+            <select
+              aria-label="Versão da jornada"
+              value={j.id}
+              onChange={(e) => {
+                const version = history.find((v) => v.id === e.target.value);
+                if (version) updated(version);
+              }}
+            >
+              {history.map((v, i) => (
+                <option key={v.id} value={v.id}>
+                  v{history.length - i} · {v.revision.slice(0, 7)} ·{" "}
+                  {new Date(v.createdAt).toLocaleString("pt-BR")} ·{" "}
+                  {statusLabels[v.status]}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         {demo && <Badge tone="blue">Dados sintéticos</Badge>}
       </div>
       {error && (
@@ -3159,7 +3287,11 @@ function Login({
   const [message, setMessage] = useState("");
   const [workspace, setWorkspace] = useState("");
   useEffect(() => {
-    setWorkspace(new URLSearchParams(location.search).get("workspace") || "");
+    setWorkspace(
+      session.workspace ||
+        new URLSearchParams(location.search).get("workspace") ||
+        "",
+    );
     if (new URLSearchParams(location.search).has("auth_error"))
       setMessage(
         "Não foi possível concluir o acesso. Confira a vinculação do seu usuário à organização e tente novamente.",
@@ -3219,21 +3351,27 @@ function Login({
         </div>
         <div className="login-form">
           <div className="eyebrow">BEM-VINDO AO AIRE</div>
-          <h2>Acesse seu workspace</h2>
+          <h2>
+            {session.portal === "admin"
+              ? "Administração Northeia"
+              : session.tenant || "Acesse seu workspace"}
+          </h2>
           <p>Continue com sua identidade corporativa.</p>
-          <label className="field">
-            Workspace
-            <input
-              value={workspace}
-              onChange={(e) =>
-                setWorkspace(e.target.value.trim().toLowerCase())
-              }
-              placeholder="Identificador informado pela sua organização"
-              maxLength={64}
-              autoComplete="organization"
-            />
-            <small>Deixe em branco para o workspace padrão.</small>
-          </label>
+          {(!session.portal || session.portal === "legacy") && (
+            <label className="field">
+              Workspace
+              <input
+                value={workspace}
+                onChange={(e) =>
+                  setWorkspace(e.target.value.trim().toLowerCase())
+                }
+                placeholder="Identificador informado pela sua organização"
+                maxLength={64}
+                autoComplete="organization"
+              />
+              <small>Deixe em branco para o workspace padrão.</small>
+            </label>
+          )}
           <button className="sso-button" onClick={() => login("microsoft")}>
             <MicrosoftIcon />
             Continuar com Microsoft

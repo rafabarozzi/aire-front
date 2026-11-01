@@ -3,7 +3,7 @@ name: aire-front
 services:
   front:
     build: .
-    image: aire-front:0.1.0
+    image: aire-front:0.2.0
     restart: unless-stopped
     env_file: .env.production
     environment:

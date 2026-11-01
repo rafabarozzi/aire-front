@@ -15,6 +15,23 @@ const role = z.enum(["admin", "engineer", "viewer"]);
 export const tenantSchema = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
   name: z.string().min(1),
+  publicOrigin: z
+    .string()
+    .url()
+    .refine((v) => {
+      const u = new URL(v);
+      return (
+        u.protocol === "https:" &&
+        u.pathname === "/" &&
+        !u.port &&
+        !u.username &&
+        !u.password &&
+        !u.search &&
+        !u.hash
+      );
+    }, "Use a origem HTTPS do portal")
+    .transform((v) => new URL(v).origin)
+    .optional(),
   members: z
     .array(
       z.object({
@@ -33,6 +50,22 @@ export const tenantSchema = z.object({
   sso: z
     .object({
       microsoftTenantId: z.string().uuid().optional(),
+      microsoftClientIdEnv: z
+        .string()
+        .regex(/^[A-Z][A-Z0-9_]+$/)
+        .optional(),
+      microsoftClientSecretEnv: z
+        .string()
+        .regex(/^[A-Z][A-Z0-9_]+$/)
+        .optional(),
+      googleClientIdEnv: z
+        .string()
+        .regex(/^[A-Z][A-Z0-9_]+$/)
+        .optional(),
+      googleClientSecretEnv: z
+        .string()
+        .regex(/^[A-Z][A-Z0-9_]+$/)
+        .optional(),
       googleDomains: z
         .array(
           z

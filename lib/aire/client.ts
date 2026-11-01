@@ -33,5 +33,6 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
       typeof data?.code === "string" ? data.code : "service_error",
     );
   }
+  if (response.status === 204) return undefined as T;
   return response.json();
 }

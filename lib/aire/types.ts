@@ -32,6 +32,9 @@ export type Session = {
   permissions: Permission[];
   providers: { google: boolean; microsoft: boolean };
   platformAdmin?: boolean;
+  portal?: "admin" | "customer" | "legacy";
+  workspace?: string;
+  version?: string;
   onboardingIdentity?: {
     provider: string;
     issuer: string;
@@ -41,6 +44,10 @@ export type Session = {
   };
 };
 export type Journey = {
+  sourceSubdirectory?: string;
+  journeyKey?: string;
+  versionCount?: number;
+  reused?: boolean;
   id: string;
   name: string;
   tier: Tier;

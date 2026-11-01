@@ -63,15 +63,7 @@ function JourneyDiagram({ source, index }: { source: string; index: number }) {
       const box = element.getAttribute("viewBox")?.split(/[ ,]+/).map(Number);
       if (active) {
         setSize({ width: box?.[2] || 1000, height: box?.[3] || 600 });
-        setScale(
-          Math.max(
-            0.03,
-            Math.min(
-              1,
-              ((panel.current?.clientWidth || 1000) - 48) / (box?.[2] || 1000),
-            ),
-          ),
-        );
+        setScale(1); // Start at readable text size; the full graph remains scrollable.
         setRendered({ source, svg: clean, error: "" });
       }
     })().catch(() => {
@@ -93,6 +85,22 @@ function JourneyDiagram({ source, index }: { source: string; index: number }) {
     document.addEventListener("fullscreenchange", onFullScreen);
     return () => document.removeEventListener("fullscreenchange", onFullScreen);
   }, []);
+  useEffect(() => {
+    if (!svg) return;
+    const frame = requestAnimationFrame(() => {
+      const area = viewport.current;
+      const entry =
+        area?.querySelector('g.node[id^="flowchart-S1-"]') ||
+        area?.querySelector("g.node");
+      if (area && entry) {
+        const box = entry.getBoundingClientRect(),
+          view = area.getBoundingClientRect();
+        area.scrollLeft += box.left - view.left - (view.width - box.width) / 2;
+        area.scrollTop += box.top - view.top - 24;
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [svg]);
   function fit() {
     setScale(
       Math.max(

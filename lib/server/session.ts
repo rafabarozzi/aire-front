@@ -1,15 +1,9 @@
 import { EncryptJWT, jwtDecrypt } from "jose";
-import {
-  AppError,
-  appOrigin,
-  isDemo,
-  membership,
-  providers,
-  type Identity,
-} from "./config.ts";
-import { defaultPolicy, type Permission } from "../aire/types.ts";
+import { AppError, isDemo, membership, type Identity } from "./config.ts";
+import { defaultPolicy, type Permission, type Session } from "../aire/types.ts";
 import { readPolicy } from "./store.ts";
-import { isPlatformAdmin } from "./platform.ts";
+import { isPlatformAdmin } from "./platform-identity.ts";
+import { portal, portalProviders } from "./portal.ts";
 export const SESSION_COOKIE = "__Host-aire-session";
 export const FLOW_COOKIE = "__Host-aire-flow";
 export const ONBOARDING_COOKIE = "__Host-aire-onboarding";
@@ -61,14 +55,14 @@ export function cookie(name: string, value: string, seconds: number) {
   return `${name}=${value}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${seconds}`;
 }
 export function checkOrigin(request: Request) {
-  if (request.headers.get("origin") !== appOrigin())
+  if (request.headers.get("origin") !== portal(request).origin)
     throw new AppError(
       403,
       "origin",
       "A origem da solicitação não é permitida.",
     );
 }
-export async function context(request: Request, permission?: Permission) {
+export async function authenticatedIdentity(request: Request) {
   if (isDemo())
     throw new AppError(
       409,
@@ -81,6 +75,9 @@ export async function context(request: Request, permission?: Permission) {
       readCookie(request, SESSION_COOKIE),
       "session",
     );
+    const p = portal(request);
+    if (p.kind !== "legacy" && payload.origin !== p.origin)
+      throw new Error("Session origin mismatch");
     identity = payload.identity as Identity;
     if (
       !identity ||
@@ -96,6 +93,37 @@ export async function context(request: Request, permission?: Permission) {
       "Entre com sua conta para continuar.",
     );
   }
+  return identity;
+}
+export async function platformContext(request: Request) {
+  const p = portal(request),
+    identity = await authenticatedIdentity(request);
+  if (p.kind === "customer" || !isPlatformAdmin(identity))
+    throw new AppError(
+      403,
+      "platform_forbidden",
+      "Acesso exclusivo da administração Northeia.",
+    );
+  return {
+    identity,
+    tenant: p.kind === "legacy" ? membership(identity).tenant : undefined,
+  };
+}
+export async function context(request: Request, permission?: Permission) {
+  const p = portal(request),
+    identity = await authenticatedIdentity(request);
+  if (p.kind === "admin")
+    throw new AppError(
+      403,
+      "customer_portal",
+      "Acesse o portal da organização para usar o workspace.",
+    );
+  if (p.tenant && identity.workspace !== p.tenant.id)
+    throw new AppError(
+      403,
+      "workspace",
+      "Esta sessão pertence a outro workspace.",
+    );
   const { tenant, role } = membership(identity);
   const policy = await readPolicy(tenant.id).catch((e) => {
     throw e;
@@ -109,17 +137,44 @@ export async function context(request: Request, permission?: Permission) {
     );
   return { tenant, role, identity, permissions: grants };
 }
-export async function sessionResponse(request: Request) {
+export async function sessionResponse(request: Request): Promise<
+  Session & {
+    identity?: { issuer?: string; subject: string; objectId?: string };
+  }
+> {
+  const p = portal(request);
+  const base = {
+    portal: p.kind,
+    workspace: p.tenant?.id,
+    tenant: p.tenant?.name,
+    version: "0.2.0",
+    providers: portalProviders(request),
+  };
   try {
+    if (p.kind === "admin") {
+      const c = await platformContext(request);
+      return {
+        ...base,
+        mode: "live",
+        authenticated: true,
+        name: c.identity.name,
+        tenant: "Administração Northeia",
+        role: "admin",
+        permissions: [],
+        platformAdmin: true,
+        onboardingIdentity: undefined,
+      };
+    }
     const c = await context(request);
     return {
+      ...base,
       mode: "live",
       authenticated: true,
       name: c.identity.name,
       tenant: c.tenant.name,
       role: c.role,
       permissions: c.permissions,
-      providers: providers(),
+      providers: portalProviders(request),
       platformAdmin: isPlatformAdmin(c.identity),
       identity: {
         issuer: c.identity.issuer,
@@ -129,21 +184,24 @@ export async function sessionResponse(request: Request) {
     };
   } catch (e) {
     if (e instanceof AppError && e.status === 401) {
-      let onboardingIdentity;
+      let onboardingIdentity: Session["onboardingIdentity"];
       try {
         const payload = await unseal(
           readCookie(request, ONBOARDING_COOKIE),
           "onboarding-identity",
         );
-        onboardingIdentity = payload.identity;
+        if (p.kind === "legacy" || payload.origin === p.origin)
+          onboardingIdentity =
+            payload.identity as Session["onboardingIdentity"];
       } catch {
         /* No valid identity test was completed. */
       }
       return {
+        ...base,
         mode: "live",
         authenticated: false,
         permissions: [],
-        providers: providers(),
+        providers: portalProviders(request),
         onboardingIdentity,
       };
     }

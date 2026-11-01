@@ -45,7 +45,7 @@ const split = (s: string) =>
 export function EnterpriseConsole({
   mode,
 }: {
-  mode: "platform" | "collectors" | "usage";
+  mode: "platform" | "collectors" | "usage" | "evolution";
 }) {
   const [session, setSession] = useState<Session | null>(null),
     [error, setError] = useState(""),
@@ -71,9 +71,38 @@ export function EnterpriseConsole({
     string,
     string | number | null
   > | null>(null);
+  const [billing, setBilling] = useState<{
+    month: string;
+    rows: Array<{
+      id: string;
+      name: string;
+      status: string;
+      plan?: Tenant["plan"] | null;
+      usage: Usage | null;
+    }>;
+  } | null>(null);
+  const [evolution, setEvolution] = useState<{
+    uniqueJourneys: number;
+    completedJourneys: number;
+    analyses: number;
+    reanalyses: number;
+    repositories: number;
+    firstAnalysisAt: string | null;
+    measurement: string;
+    months: Array<{
+      month: string;
+      analyses: number;
+      completed: number;
+      failed: number;
+    }>;
+  } | null>(null);
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   async function load() {
-    if (mode === "platform") setRegistry(await request("platform"));
+    if (mode === "platform") {
+      setRegistry(await request("platform"));
+      setBilling(await request(`platform/billing?month=${month}`));
+    }
+    if (mode === "evolution") setEvolution(await request("evolution"));
     if (mode === "collectors") setAgents(await request("collectors"));
     if (mode === "usage") setOwnUsage(await request("usage"));
   }
@@ -118,8 +147,12 @@ export function EnterpriseConsole({
         ...editing,
         id,
         name: value("name"),
+        ...(value("publicOrigin")
+          ? { publicOrigin: value("publicOrigin") }
+          : {}),
         enabled: f.get("enabled") === "on",
         sso: {
+          ...editing?.sso,
           ...(ms ? { microsoftTenantId: ms } : {}),
           googleDomains: split(value("domains")),
         },
@@ -141,7 +174,9 @@ export function EnterpriseConsole({
         plan: {
           name: value("plan"),
           monthlyUsd: Number(value("monthly")),
-          infrastructureMonthlyUsd: Number(value("infra")),
+          infrastructureMonthlyUsd: value("infra")
+            ? Number(value("infra"))
+            : undefined,
         },
       };
       await request("platform", {
@@ -188,7 +223,11 @@ export function EnterpriseConsole({
     (mode === "platform"
       ? session.platformAdmin
       : session.permissions.includes(
-          mode === "collectors" ? "collectors:read" : "usage:read",
+          mode === "collectors"
+            ? "collectors:read"
+            : mode === "evolution"
+              ? "journeys:read"
+              : "usage:read",
         ));
   const admin = editing?.members.find((m) => m.role === "admin");
   return (
@@ -198,7 +237,11 @@ export function EnterpriseConsole({
           AIRE <small>by Northeia</small>
         </a>
         <nav>
-          <a href="/#jornadas">Voltar ao workspace</a>
+          <a href="/#jornadas">
+            {session?.portal === "admin"
+              ? "Início da administração"
+              : "Voltar ao workspace"}
+          </a>
           <button
             className="button secondary"
             onClick={() => {
@@ -208,6 +251,19 @@ export function EnterpriseConsole({
           >
             Tema {dark ? "claro" : "escuro"}
           </button>
+          {session?.authenticated && (
+            <button
+              className="button secondary"
+              onClick={() =>
+                operation(async () => {
+                  await request("logout", { method: "POST" });
+                  location.href = "/";
+                })
+              }
+            >
+              Sair
+            </button>
+          )}
         </nav>
       </header>
       <main>
@@ -221,14 +277,18 @@ export function EnterpriseConsole({
             ? "Clientes e consumo"
             : mode === "collectors"
               ? "Coletores privados"
-              : "Consumo do workspace"}
+              : mode === "evolution"
+                ? "Evolução do ambiente"
+                : "Consumo do workspace"}
         </h1>
         <p>
           {mode === "platform"
             ? "Organizações, identidade corporativa e custos estimados em um só lugar."
             : mode === "collectors"
               ? "Colete código autorizado na rede do cliente. O processamento acontece no Atlas."
-              : "Acompanhe o uso de IA da sua organização no mês atual."}
+              : mode === "evolution"
+                ? "Acompanhe a adoção, as reanálises e os resultados medidos no seu ambiente."
+                : "Acompanhe o uso de IA da sua organização no mês atual."}
         </p>
         {error && (
           <div className="error-panel" role="alert">
@@ -252,6 +312,60 @@ export function EnterpriseConsole({
           </div>
         ) : (
           <>
+            {mode === "evolution" && evolution && (
+              <section className="panel enterprise-section">
+                <h2>Base de evolução</h2>
+                <div className="enterprise-metrics">
+                  {[
+                    ["Jornadas únicas", evolution.uniqueJourneys],
+                    [
+                      "Análises concluídas (versão atual)",
+                      evolution.completedJourneys,
+                    ],
+                    ["Reanálises preservadas", evolution.reanalyses],
+                    ["Repositórios mapeados", evolution.repositories],
+                  ].map(([label, value]) => (
+                    <div key={label}>
+                      <small>{label}</small>
+                      <strong>{value}</strong>
+                    </div>
+                  ))}
+                </div>
+                <p>{evolution.measurement}</p>
+                <div className="enterprise-table">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Mês de criação</th>
+                        <th>Análises</th>
+                        <th>Concluídas</th>
+                        <th>Falharam</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {evolution.months.map((m) => (
+                        <tr key={m.month}>
+                          <td>{m.month}</td>
+                          <td>{m.analyses}</td>
+                          <td>{m.completed}</td>
+                          <td>{m.failed}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {!evolution.analyses && (
+                  <p>Mapeie a primeira jornada para iniciar a linha de base.</p>
+                )}
+                <h3>Resultados operacionais</h3>
+                <p>
+                  Alertas criados, alertas ajustados, horas poupadas e retorno
+                  financeiro: ainda não medidos. O histórico de análises já é
+                  preservado; sugestões só contarão como resultado após
+                  aplicação comprovada.
+                </p>
+              </section>
+            )}
             {mode === "platform" && (
               <>
                 <section className="panel enterprise-section">
@@ -350,6 +464,19 @@ export function EnterpriseConsole({
                       />
                     </label>
                     <label className="field">
+                      Domínio do portal do cliente
+                      <input
+                        name="publicOrigin"
+                        type="url"
+                        defaultValue={editing?.publicOrigin}
+                        placeholder="https://northeia-lab.northeia.com"
+                      />
+                      <small>
+                        Cadastre o DNS e este endereço nos redirects do provedor
+                        SSO.
+                      </small>
+                    </label>
+                    <label className="field">
                       Tenant ID do Microsoft Entra
                       <input
                         name="microsoft"
@@ -427,7 +554,7 @@ export function EnterpriseConsole({
                         min="0"
                         step="0.01"
                         defaultValue={
-                          editing?.plan?.infrastructureMonthlyUsd || 0
+                          editing?.plan?.infrastructureMonthlyUsd ?? ""
                         }
                       />
                       <small>
@@ -467,15 +594,23 @@ export function EnterpriseConsole({
                   {editing && (
                     <p>
                       Link de entrada:{" "}
-                      <a href={`/?workspace=${editing.id}`}>
-                        {typeof window !== "undefined" ? location.origin : ""}
-                        /?workspace={editing.id}
+                      <a
+                        href={
+                          editing.publicOrigin || `/?workspace=${editing.id}`
+                        }
+                      >
+                        {editing.publicOrigin || `/?workspace=${editing.id}`}
                       </a>
                     </p>
                   )}
                 </form>
                 <section className="panel enterprise-section">
-                  <h2>Custos e utilização</h2>
+                  <h2>Billing por organização</h2>
+                  <p>
+                    Consumo de IA medido, custo estimado pelo catálogo e rateio
+                    de infraestrutura. Valores sem medição permanecem
+                    desconhecidos.
+                  </p>
                   <label className="field">
                     Mês de referência, UTC
                     <input
@@ -492,6 +627,77 @@ export function EnterpriseConsole({
                     estimativas, com preços versionados. Tentativas sem preço ou
                     sem medição ficam sinalizadas.
                   </p>
+                  <button
+                    className="button secondary"
+                    disabled={busy}
+                    onClick={() =>
+                      operation(async () =>
+                        setBilling(
+                          await request(`platform/billing?month=${month}`),
+                        ),
+                      )
+                    }
+                  >
+                    Atualizar billing
+                  </button>
+                  {billing && (
+                    <div className="enterprise-table">
+                      <table>
+                        <caption>{billing.month} · UTC · USD</caption>
+                        <thead>
+                          <tr>
+                            <th>Organização</th>
+                            <th>Tentativas / tokens</th>
+                            <th>IA conhecida</th>
+                            <th>Sem preço / medição</th>
+                            <th>Infra mensal</th>
+                            <th>Mensalidade</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {billing.rows.map((row) => (
+                            <tr key={row.id}>
+                              <td>
+                                {row.name}
+                                <small>
+                                  {row.status === "available"
+                                    ? "Disponível"
+                                    : row.status === "inactive"
+                                      ? "Inativa"
+                                      : "Motor indisponível"}
+                                </small>
+                              </td>
+                              <td>
+                                {row.usage
+                                  ? `${row.usage.attempts} / ${row.usage.input_tokens + row.usage.output_tokens}`
+                                  : "—"}
+                              </td>
+                              <td>
+                                {row.usage
+                                  ? money(Number(row.usage.estimated_ai_usd))
+                                  : "—"}
+                              </td>
+                              <td>
+                                {row.usage
+                                  ? `${row.usage.unpriced_attempts} / ${row.usage.usage_unknown_attempts}`
+                                  : "—"}
+                              </td>
+                              <td>
+                                {row.plan?.infrastructureMonthlyUsd == null
+                                  ? "Não informado"
+                                  : money(row.plan.infrastructureMonthlyUsd)}
+                              </td>
+                              <td>
+                                {row.plan
+                                  ? money(row.plan.monthlyUsd)
+                                  : "Não definido"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
                   {usage && (
                     <>
                       <h3>

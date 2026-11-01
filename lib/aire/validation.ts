@@ -39,6 +39,7 @@ export const journeyInputSchema = z
     }),
     revision: z.string().regex(/^[0-9a-f]{40}$/),
     collectorId: z.string().uuid().optional(),
+    reanalyze: z.boolean().optional(),
     sourceSubdirectory: z
       .string()
       .max(500)

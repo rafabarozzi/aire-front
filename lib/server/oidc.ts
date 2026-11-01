@@ -1,11 +1,7 @@
+import { portal } from "./portal.ts";
+import { isPlatformAdmin } from "./platform-identity.ts";
 import * as oidc from "openid-client";
-import {
-  AppError,
-  appOrigin,
-  membership,
-  tenants,
-  type Identity,
-} from "./config.ts";
+import { AppError, membership, tenants, type Identity } from "./config.ts";
 import {
   seal,
   unseal,
@@ -46,8 +42,16 @@ export function identityConnection(
       "provider",
       "Google não está autorizado neste workspace.",
     );
-  const clientId = process.env[prefix + "_CLIENT_ID"],
-    clientSecret = process.env[prefix + "_CLIENT_SECRET"];
+  const keyPrefix = provider === "microsoft" ? "microsoft" : "google";
+  const clientId =
+      process.env[
+        tenant?.sso?.[`${keyPrefix}ClientIdEnv`] || prefix + "_CLIENT_ID"
+      ],
+    clientSecret =
+      process.env[
+        tenant?.sso?.[`${keyPrefix}ClientSecretEnv`] ||
+          prefix + "_CLIENT_SECRET"
+      ];
   if (!clientId || !clientSecret)
     throw new AppError(
       503,
@@ -105,7 +109,8 @@ export function validatedIdentity(
   };
 }
 export async function auth(request: Request, provider: "google" | "microsoft") {
-  const origin = appOrigin(),
+  const realm = portal(request);
+  const origin = realm.origin,
     redirectUri = origin + `/auth/${provider}`;
   const current = new URL(redirectUri);
   current.search = new URL(request.url).search;
@@ -115,11 +120,21 @@ export async function auth(request: Request, provider: "google" | "microsoft") {
     const flow = callback
       ? await unseal(readCookie(request, FLOW_COOKIE), "oidc-flow")
       : undefined;
-    const workspace = callback
+    const requestedWorkspace = callback
       ? typeof flow?.workspace === "string"
         ? flow.workspace
         : undefined
       : current.searchParams.get("workspace") || undefined;
+    const workspace =
+      realm.kind === "customer" ? realm.tenant!.id : requestedWorkspace;
+    if (
+      realm.kind !== "legacy" &&
+      requestedWorkspace &&
+      requestedWorkspace !== realm.tenant?.id
+    )
+      throw new Error("Portal mismatch");
+    if (realm.kind !== "legacy" && callback && flow?.origin !== origin)
+      throw new Error("Flow origin mismatch");
     const connection = identityConnection(provider, workspace);
     if (
       callback &&
@@ -158,6 +173,7 @@ export async function auth(request: Request, provider: "google" | "microsoft") {
             await seal(
               {
                 provider,
+                origin,
                 workspace,
                 issuer: connection.issuer,
                 verifier,
@@ -181,7 +197,10 @@ export async function auth(request: Request, provider: "google" | "microsoft") {
     });
     const identity = validatedIdentity(provider, tokens.claims()!, workspace);
     try {
-      membership(identity);
+      if (realm.kind === "admin") {
+        if (!isPlatformAdmin(identity))
+          throw new Error("Operator not registered");
+      } else membership(identity);
     } catch {
       const safe = {
         provider: identity.provider,
@@ -198,7 +217,7 @@ export async function auth(request: Request, provider: "google" | "microsoft") {
         "Set-Cookie",
         cookie(
           ONBOARDING_COOKIE,
-          await seal({ identity: safe }, "onboarding-identity", 300),
+          await seal({ identity: safe, origin }, "onboarding-identity", 300),
           300,
         ),
       );
@@ -212,7 +231,11 @@ export async function auth(request: Request, provider: "google" | "microsoft") {
     });
     headers.append(
       "Set-Cookie",
-      cookie(SESSION_COOKIE, await seal({ identity }, "session", 1800), 1800),
+      cookie(
+        SESSION_COOKIE,
+        await seal({ identity, origin }, "session", 1800),
+        1800,
+      ),
     );
     headers.append("Set-Cookie", cookie(FLOW_COOKIE, "", 0));
     headers.append("Set-Cookie", cookie(ONBOARDING_COOKIE, "", 0));

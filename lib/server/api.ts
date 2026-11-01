@@ -6,6 +6,9 @@ import { platformApi } from "./platform.ts";
 import { authorizedRepositories } from "./connections.ts";
 import {
   getJourney,
+  journeyHistory,
+  lockJourney,
+  evolution,
   listJourneys,
   readPolicy,
   saveJourney,
@@ -63,6 +66,14 @@ export async function api(request: Request, path: string[]) {
     if (request.method !== "GET") checkOrigin(request);
     if (path[0] === "platform")
       return json(await platformApi(request, path, () => body(request)));
+    if (path.join("/") === "repositories" && request.method === "GET") {
+      const c = await context(request, "journeys:create");
+      return json({ repositories: await authorizedRepositories(c.tenant) });
+    }
+    if (path.join("/") === "evolution" && request.method === "GET") {
+      const c = await context(request, "journeys:read");
+      return json(await evolution(c.tenant.id));
+    }
     if (path[0] === "usage" && path.length === 1 && request.method === "GET") {
       const c = await context(request, "usage:read");
       const report = z
@@ -219,26 +230,118 @@ export async function api(request: Request, path: string[]) {
             "Revise nome, endpoint, criticidade e revisão da jornada.",
           );
         const input = parsed.data;
-        if (input.collectorId) {
-          const allowed = await authorizedRepositories(c.tenant);
-          if (
-            !allowed.some(
-              (r) => r.toLowerCase() === input.repository.toLowerCase(),
-            )
+        const allowedRepos = await authorizedRepositories(c.tenant);
+        if (
+          !allowedRepos.some(
+            (r) => r.toLowerCase() === input.repository.toLowerCase(),
           )
+        )
+          throw new AppError(
+            403,
+            "repository_not_allowed",
+            "Repositório não autorizado nesta organização.",
+          );
+        const release = await lockJourney(c.tenant.id, input);
+        try {
+          const versions = await journeyHistory(c.tenant.id, input as Journey);
+          const active = versions.find(
+            (j) => j.status !== "COMPLETED" && j.status !== "FAILED",
+          );
+          const reusable =
+            active ||
+            (!input.reanalyze &&
+              versions.find(
+                (j) =>
+                  j.status === "COMPLETED" &&
+                  j.revision === input.revision &&
+                  j.tier === input.tier,
+              ));
+          if (reusable)
+            return json({
+              ...reusable,
+              reused: true,
+              versionCount: versions.length,
+            });
+          if (input.collectorId) {
+            const allowed = await authorizedRepositories(c.tenant);
+            if (
+              !allowed.some(
+                (r) => r.toLowerCase() === input.repository.toLowerCase(),
+              )
+            )
+              throw new AppError(
+                403,
+                "repository_not_allowed",
+                "Repositório não autorizado nesta organização.",
+              );
+            const created = z
+              .object({
+                analysis_id: z.string().uuid(),
+                created_at: z.string(),
+              })
+              .parse(
+                await (
+                  await engine(
+                    c.tenant,
+                    `/v1/collectors/${input.collectorId}/analyses`,
+                    {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        journey_name: input.name,
+                        journey_tier: input.tier,
+                        endpoint: input.endpoint,
+                        repository: input.repository,
+                        revision: input.revision,
+                        source_subdirectory: input.sourceSubdirectory,
+                      }),
+                    },
+                  )
+                ).json(),
+              );
+            const journey: Journey = {
+              id: created.analysis_id,
+              name: input.name,
+              tier: input.tier,
+              endpoint: input.endpoint,
+              repository: input.repository,
+              revision: input.revision,
+              status: "AWAITING_SOURCE",
+              createdAt: created.created_at,
+              stacks: [],
+              sourceSubdirectory: input.sourceSubdirectory,
+            };
+            await saveJourney(c.tenant.id, journey);
+            return json(journey, 202);
+          }
+          if (busy.has(c.tenant.id))
             throw new AppError(
-              403,
-              "repository_not_allowed",
-              "Repositório não autorizado nesta organização.",
+              429,
+              "busy",
+              "Já existe uma solicitação em preparação. Aguarde alguns segundos.",
             );
-          const created = z
-            .object({ analysis_id: z.string().uuid(), created_at: z.string() })
-            .parse(
-              await (
-                await engine(
-                  c.tenant,
-                  `/v1/collectors/${input.collectorId}/analyses`,
-                  {
+          busy.add(c.tenant.id);
+          let j: Journey | undefined;
+          try {
+            // Revalidate immutable revision and authorization; never trust prior UI checks.
+            await validateRepository(
+              c.tenant,
+              input.repository,
+              input.revision,
+            );
+            const bytes = await snapshot(
+              c.tenant,
+              input.repository,
+              input.revision,
+            );
+            const created = z
+              .object({
+                analysis_id: z.string().uuid(),
+                created_at: z.string().optional(),
+              })
+              .parse(
+                await (
+                  await engine(c.tenant, "/v1/analyses", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
@@ -249,91 +352,43 @@ export async function api(request: Request, path: string[]) {
                       revision: input.revision,
                       source_subdirectory: input.sourceSubdirectory,
                     }),
-                  },
-                )
-              ).json(),
-            );
-          const journey: Journey = {
-            id: created.analysis_id,
-            name: input.name,
-            tier: input.tier,
-            endpoint: input.endpoint,
-            repository: input.repository,
-            revision: input.revision,
-            status: "AWAITING_SOURCE",
-            createdAt: created.created_at,
-            stacks: [],
-          };
-          await saveJourney(c.tenant.id, journey);
-          return json(journey, 202);
-        }
-        if (busy.has(c.tenant.id))
-          throw new AppError(
-            429,
-            "busy",
-            "Já existe uma solicitação em preparação. Aguarde alguns segundos.",
-          );
-        busy.add(c.tenant.id);
-        let j: Journey | undefined;
-        try {
-          // Revalidate immutable revision and authorization; never trust prior UI checks.
-          await validateRepository(c.tenant, input.repository, input.revision);
-          const bytes = await snapshot(
-            c.tenant,
-            input.repository,
-            input.revision,
-          );
-          const created = z
-            .object({
-              analysis_id: z.string().uuid(),
-              created_at: z.string().optional(),
-            })
-            .parse(
+                  })
+                ).json(),
+              );
+            j = {
+              id: created.analysis_id,
+              name: input.name,
+              tier: input.tier,
+              endpoint: input.endpoint,
+              repository: input.repository,
+              revision: input.revision,
+              status: "AWAITING_SOURCE",
+              createdAt: created.created_at || new Date().toISOString(),
+              stacks: [],
+              sourceSubdirectory: input.sourceSubdirectory,
+            };
+            await saveJourney(c.tenant.id, j);
+            const uploaded = engineState.parse(
               await (
-                await engine(c.tenant, "/v1/analyses", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    journey_name: input.name,
-                    journey_tier: input.tier,
-                    endpoint: input.endpoint,
-                    repository: input.repository,
-                    revision: input.revision,
-                    source_subdirectory: input.sourceSubdirectory,
-                  }),
+                await engine(c.tenant, `/v1/analyses/${j.id}/source`, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/zip" },
+                  body: bytes as BodyInit,
                 })
               ).json(),
             );
-          j = {
-            id: created.analysis_id,
-            name: input.name,
-            tier: input.tier,
-            endpoint: input.endpoint,
-            repository: input.repository,
-            revision: input.revision,
-            status: "AWAITING_SOURCE",
-            createdAt: created.created_at || new Date().toISOString(),
-            stacks: [],
-          };
-          await saveJourney(c.tenant.id, j);
-          const uploaded = engineState.parse(
-            await (
-              await engine(c.tenant, `/v1/analyses/${j.id}/source`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/zip" },
-                body: bytes as BodyInit,
-              })
-            ).json(),
-          );
-          j.status =
-            uploaded.status in statusLabels ? uploaded.status : "QUEUED";
-          await saveJourney(c.tenant.id, j);
-          return json(j, 202);
-        } catch (e) {
-          if (j) await saveJourney(c.tenant.id, { ...j, status: "FAILED" });
-          throw e;
+            j.status =
+              uploaded.status in statusLabels ? uploaded.status : "QUEUED";
+            await saveJourney(c.tenant.id, j);
+            return json(j, 202);
+          } catch (e) {
+            if (j) await saveJourney(c.tenant.id, { ...j, status: "FAILED" });
+            throw e;
+          } finally {
+            busy.delete(c.tenant.id);
+          }
         } finally {
-          busy.delete(c.tenant.id);
+          await release();
         }
       }
     }
@@ -343,6 +398,12 @@ export async function api(request: Request, path: string[]) {
         path[2] === "artifacts" ? "artifacts:read" : "journeys:read",
       );
       const j = await getJourney(c.tenant.id, path[1]); // Ownership gate precedes every engine request.
+      if (
+        request.method === "GET" &&
+        path[2] === "history" &&
+        path.length === 3
+      )
+        return json(await journeyHistory(c.tenant.id, j));
       if (request.method === "GET" && path.length === 2) {
         const state = engineState.parse(
           await (await engine(c.tenant, `/v1/analyses/${j.id}`)).json(),

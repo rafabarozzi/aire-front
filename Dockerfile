@@ -14,6 +14,7 @@ WORKDIR /app
 COPY --from=build --chown=aire:aire /app/.next-node/standalone ./
 COPY --from=build --chown=aire:aire /app/.next-node/static ./.next-node/static
 COPY --from=build --chown=aire:aire /app/public ./public
+COPY --chown=aire:aire scripts/seed-northeia-lab.mjs ./scripts/seed-northeia-lab.mjs
 USER 1001:1001
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD node -e "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"

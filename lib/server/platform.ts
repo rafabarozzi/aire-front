@@ -16,28 +16,11 @@ import {
   type Identity,
   type Tenant,
 } from "./config.ts";
-import { context } from "./session.ts";
+import { platformContext } from "./session.ts";
+import { isPlatformAdmin } from "./platform-identity.ts";
 import { engine } from "./upstream.ts";
 
-export function isPlatformAdmin(identity: Identity) {
-  const admins = z
-    .array(
-      z
-        .object({
-          provider: z.enum(["microsoft", "google"]),
-          issuer: z.string().url(),
-          subject: z.string().min(1),
-        })
-        .strict(),
-    )
-    .parse(JSON.parse(process.env.AIRE_PLATFORM_ADMINS_JSON || "[]"));
-  return admins.some(
-    (a) =>
-      a.provider === identity.provider &&
-      a.issuer === identity.issuer &&
-      a.subject === identity.sub,
-  );
-}
+export { isPlatformAdmin } from "./platform-identity.ts";
 async function saveTenant(tenant: Tenant, revision: number, actor: Identity) {
   const root = process.env.AIRE_DATA_DIR || "/data";
   await mkdir(root, { recursive: true, mode: 0o700 });
@@ -89,13 +72,42 @@ export async function platformApi(
   path: string[],
   body: () => Promise<unknown>,
 ) {
-  const c = await context(request);
+  const c = await platformContext(request);
   if (!isPlatformAdmin(c.identity))
     throw new AppError(
       403,
       "platform_forbidden",
       "Acesso exclusivo da administração Northeia.",
     );
+  if (path.join("/") === "platform/billing" && request.method === "GET") {
+    const month =
+      new URL(request.url).searchParams.get("month") ||
+      new Date().toISOString().slice(0, 7);
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month))
+      throw new AppError(422, "month", "Informe o mês no formato AAAA-MM.");
+    const rows = [];
+    for (const tenant of tenants()) {
+      const base = {
+        id: tenant.id,
+        name: tenant.name,
+        plan: tenant.plan || null,
+        origin: tenant.publicOrigin || null,
+      };
+      if (tenant.enabled === false) {
+        rows.push({ ...base, status: "inactive", usage: null });
+        continue;
+      }
+      try {
+        const usage = billingUsage.parse(
+          await (await engine(tenant, `/v1/usage?month=${month}`)).json(),
+        );
+        rows.push({ ...base, status: "available", usage });
+      } catch {
+        rows.push({ ...base, status: "unavailable", usage: null });
+      }
+    }
+    return { month, currency: "USD", estimated: true, rows };
+  }
   if (path.length === 1 && request.method === "GET")
     return { revision: managedRegistry().revision, tenants: tenants() };
   if (path.length === 1 && request.method === "PUT") {
@@ -123,7 +135,7 @@ export async function platformApi(
         "onboarding_incomplete",
         "Configure ao menos um provedor SSO e o plano.",
       );
-    if (tenant.id === c.tenant.id)
+    if (tenant.id === c.tenant?.id)
       throw new AppError(
         409,
         "self_lockout",
@@ -141,6 +153,27 @@ export async function platformApi(
         409,
         "engine_shared",
         "Cada cliente deve ter referências próprias para URL e credencial do motor.",
+      );
+    if (
+      tenant.publicOrigin &&
+      (tenant.publicOrigin ===
+        process.env.AIRE_APP_ORIGIN?.replace(/\/$/, "") ||
+        others.some((t) => t.publicOrigin === tenant.publicOrigin))
+    )
+      throw new AppError(
+        409,
+        "portal_duplicate",
+        "Este domínio já pertence a outro painel.",
+      );
+    if (
+      tenant.enabled !== false &&
+      process.env.AIRE_PORTAL_MODE === "multi" &&
+      !tenant.publicOrigin
+    )
+      throw new AppError(
+        422,
+        "portal_required",
+        "Informe o domínio HTTPS do portal antes de ativar a organização.",
       );
     if (tenant.enabled !== false) {
       const health = z
@@ -173,3 +206,15 @@ export async function platformApi(
   }
   throw new AppError(404, "not_found", "Recurso não encontrado.");
 }
+
+const billingUsage = z.object({
+  month: z.string(),
+  attempts: z.number().int().nonnegative(),
+  input_tokens: z.number().int().nonnegative(),
+  output_tokens: z.number().int().nonnegative(),
+  usage_unknown_attempts: z.number().int().nonnegative(),
+  unpriced_attempts: z.number().int().nonnegative(),
+  estimated_ai_usd: z.string().regex(/^\d+(?:\.\d+)?$/),
+  mapping_cpu_seconds: z.number().nonnegative().optional(),
+  stored_bytes_now: z.number().nonnegative().optional(),
+});
