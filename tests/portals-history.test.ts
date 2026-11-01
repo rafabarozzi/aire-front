@@ -236,3 +236,14 @@ test("billing unknown measurements and unavailable engine are never reported as 
   assert.equal(down.rows[0].usage, null);
   assert.equal(down.rows[0].status, "unavailable");
 });
+
+test("unconfigured container keeps unauthenticated journey API closed with 401", async () => {
+  delete process.env.AIRE_APP_ORIGIN;
+  delete process.env.AIRE_SESSION_SECRET;
+  delete process.env.AIRE_PORTAL_MODE;
+  const response = await api(
+    new Request("http://127.0.0.1:3000/api/console/journeys"),
+    ["journeys"],
+  );
+  assert.equal(response.status, 401);
+});

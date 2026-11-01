@@ -96,8 +96,8 @@ export async function authenticatedIdentity(request: Request) {
   return identity;
 }
 export async function platformContext(request: Request) {
-  const p = portal(request),
-    identity = await authenticatedIdentity(request);
+  const identity = await authenticatedIdentity(request),
+    p = portal(request);
   if (p.kind === "customer" || !isPlatformAdmin(identity))
     throw new AppError(
       403,
@@ -110,8 +110,8 @@ export async function platformContext(request: Request) {
   };
 }
 export async function context(request: Request, permission?: Permission) {
-  const p = portal(request),
-    identity = await authenticatedIdentity(request);
+  const identity = await authenticatedIdentity(request),
+    p = portal(request);
   if (p.kind === "admin")
     throw new AppError(
       403,
