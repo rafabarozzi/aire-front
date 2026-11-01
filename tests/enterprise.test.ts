@@ -225,6 +225,77 @@ test("suspending a client denies existing sessions and machine gateway requests"
   assert.equal(response.status, 401);
 });
 
+test("shared login resolves an SSO organization from verified identity, never from a name alone", () => {
+  process.env.AIRE_MICROSOFT_TENANT_ID = ms;
+  const tenant = customer(true);
+  const identity = validatedIdentity("microsoft", {
+    iss: `https://login.microsoftonline.com/${ms}/v2.0`,
+    tid: ms,
+    sub: "signed-subject",
+    oid: "admin-object",
+  });
+  assert.equal(identity.workspace, undefined);
+  const dedicatedApp = {
+    ...tenant,
+    sso: { ...tenant.sso!, microsoftClientIdEnv: "ALPHA_CLIENT_ID" },
+  };
+  assert.throws(() => membership(identity, [dedicatedApp]));
+  assert.equal(
+    membership({ ...identity, workspace: "alpha" }, [dedicatedApp]).tenant.id,
+    "alpha",
+  );
+  assert.equal(membership(identity, [initial, tenant]).tenant.id, "alpha");
+  assert.equal(
+    membership({ ...identity, objectId: "other", groups: ["engineers"] }, [
+      tenant,
+    ]).role,
+    "engineer",
+  );
+  assert.throws(() =>
+    membership({ ...identity, objectId: "other", name: "alpha" }, [tenant]),
+  );
+  assert.throws(() =>
+    membership(
+      {
+        ...identity,
+        issuer: `https://login.microsoftonline.com/${otherMs}/v2.0`,
+      },
+      [tenant],
+    ),
+  );
+  assert.throws(() =>
+    membership({ ...identity, workspace: "northeia" }, [tenant]),
+  );
+  assert.throws(() =>
+    membership(identity, [tenant, { ...tenant, id: "beta" }]),
+  );
+  assert.throws(() => membership(identity, [{ ...tenant, enabled: false }]));
+});
+
+test("Google shared login requires verified hd and immutable membership, not email", () => {
+  const tenant = {
+    ...customer(true),
+    members: [
+      {
+        provider: "google" as const,
+        subject: "signed-google-sub",
+        role: "viewer" as const,
+      },
+    ],
+  };
+  const identity = validatedIdentity("google", {
+    iss: "https://accounts.google.com",
+    sub: "signed-google-sub",
+    hd: "alpha.example",
+  });
+  assert.equal(membership(identity, [tenant]).tenant.id, "alpha");
+  assert.throws(() => membership({ ...identity, domain: undefined }, [tenant]));
+  assert.throws(() =>
+    membership({ ...identity, domain: "evil.example" }, [tenant]),
+  );
+  assert.throws(() => membership({ ...identity, sub: "unknown" }, [tenant]));
+});
+
 test("collector gateway forwards only machine token and restricted paths, never engine admin credential", async () => {
   process.env.AIRE_TENANTS_JSON = JSON.stringify([initial, customer(true)]);
   let calls = 0;

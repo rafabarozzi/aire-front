@@ -5,7 +5,7 @@ import {
   assertSafeFlowchart,
 } from "../lib/aire/journey-report.ts";
 
-test("moves the complete macroflow above the report without cutting steps or evidence", () => {
+test("extracts the complete macroflow and preserves section 3 and all report content", () => {
   const graph =
     "flowchart TD\n" +
     Array.from({ length: 80 }, (_, i) => `S${i}["Passo ${i}"]`).join("\n");
@@ -14,8 +14,23 @@ test("moves the complete macroflow above the report without cutting steps or evi
   assert.deepEqual(result.diagrams, [graph]);
   assert.ok(result.markdown.includes("Descrição"));
   assert.ok(result.markdown.includes("Controller.cs:20"));
-  assert.ok(!result.markdown.includes("Macro Fluxo"));
+  assert.ok(result.markdown.includes("3 - Macro Fluxo"));
+  assert.equal(result.sections[1].number, 3);
+  assert.deepEqual(result.sections[1].diagramIndexes, [0]);
   assertSafeFlowchart(result.diagrams[0]);
+});
+
+test("section grouping keeps 1–6 in order, ignores code headings and preserves nested headings", () => {
+  const source = `# 1 - Identificação\nNome\n# 2 - Descrição\nResumo\n# 3 - Macro Fluxo\n\n\`\`\`mermaid\ngraph TD\nA --> B\n\`\`\`\n# 4 - Passos\n## Detalhes\n\`\`\`text\n# 9 - Dentro do código\n\`\`\`\n| Passo | Ação |\n|---|---|\n| 111 | Fim |\n# 5 - Componentes\nAPIs\n# 6 - Alcance\nLimites`;
+  const report = splitJourneyReport(source);
+  assert.deepEqual(
+    report.sections.map((s) => s.number),
+    [1, 2, 3, 4, 5, 6],
+  );
+  assert.ok(report.sections[3].markdown.includes("# 9 - Dentro do código"));
+  assert.ok(report.sections[3].markdown.includes("## Detalhes"));
+  assert.ok(report.sections[3].markdown.includes("| 111 | Fim |"));
+  assert.equal(report.sections[5].markdown, "Limites");
 });
 
 test("preserves non-diagram blocks, unclosed fences and multiple diagrams", () => {

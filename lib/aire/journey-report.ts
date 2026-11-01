@@ -1,12 +1,49 @@
-/** Move complete Mermaid blocks to the map, preserving the rest of the report. */
+export type ReportSection = {
+  title: string;
+  number: number | null;
+  markdown: string;
+  diagramIndexes: number[];
+};
+
+/** Extract complete diagrams without deleting their numbered report sections. */
 export function splitJourneyReport(source: string) {
   const lines = source.replace(/\r\n/g, "\n").split("\n");
   const body: string[] = [],
     diagrams: string[] = [];
+  const sections: ReportSection[] = [];
+  let section: ReportSection = {
+    title: "",
+    number: null,
+    markdown: "",
+    diagramIndexes: [],
+  };
+  const append = (line: string) => {
+    body.push(line);
+    section.markdown += line + "\n";
+  };
+  const finish = () => {
+    section.markdown = section.markdown.trim();
+    if (section.title || section.markdown || section.diagramIndexes.length)
+      sections.push(section);
+  };
   for (let i = 0; i < lines.length; i++) {
+    const heading = /^ {0,3}#\s+(.+?)\s*$/.exec(lines[i]);
+    if (heading) {
+      finish();
+      heading[1] = heading[1].replace(/\s+#+$/, "");
+      const number = /^(\d+)\s*[-–—.)]\s+/.exec(heading[1]);
+      section = {
+        title: heading[1],
+        number: number ? Number(number[1]) : null,
+        markdown: "",
+        diagramIndexes: [],
+      };
+      body.push(lines[i]);
+      continue;
+    }
     const opening = /^ {0,3}(`{3,}|~{3,})([^`]*)$/.exec(lines[i]);
     if (!opening) {
-      body.push(lines[i]);
+      append(lines[i]);
       continue;
     }
     const close = new RegExp(
@@ -15,19 +52,15 @@ export function splitJourneyReport(source: string) {
     let end = i + 1;
     while (end < lines.length && !close.test(lines[end])) end++;
     if (end === lines.length || opening[2].trim().toLowerCase() !== "mermaid") {
-      body.push(...lines.slice(i, Math.min(end + 1, lines.length)));
+      lines.slice(i, Math.min(end + 1, lines.length)).forEach(append);
     } else {
+      section.diagramIndexes.push(diagrams.length);
       diagrams.push(lines.slice(i + 1, end).join("\n"));
-      const last = body.findLastIndex((line) => line.trim() !== "");
-      if (
-        last >= 0 &&
-        /^#{1,6}\s+(?:\d+\s*[-–]\s*)?Macro\s*fluxo\b/i.test(body[last])
-      )
-        body.splice(last);
     }
     i = end;
   }
-  return { diagrams, markdown: body.join("\n").trim() };
+  finish();
+  return { diagrams, markdown: body.join("\n").trim(), sections };
 }
 
 export function assertSafeFlowchart(source: string) {

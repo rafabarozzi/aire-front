@@ -8,6 +8,8 @@ Cada organização tem `publicOrigin`, por exemplo `https://northeia-lab.northei
 
 O modo legado continua disponível durante a migração. Não ative o modo multi antes de registrar o operador e preparar o portal dos clientes.
 
+O login não pede um identificador de workspace. No subdomínio do cliente, a origem seleciona a conexão SSO e o servidor valida o vínculo da identidade autenticada. No portal legado compartilhado, o provedor configurado autentica o usuário e o vínculo único por emissor + subject/Object ID ou grupo identifica a organização. Organizações com outro diretório/aplicativo SSO devem usar seu próprio portal; o servidor não descobre um diretório arbitrário a partir do e-mail. Vínculos ambíguos são recusados e o usuário deve acessar o subdomínio da organização. Links legados com `?workspace=` continuam aceitos sob as mesmas verificações.
+
 ## Cadastro e SSO
 
 1. Em Clientes e consumo, cadastre identificador, nome, origem HTTPS, plano e tenant Microsoft ou domínio Google Workspace. Salve em rascunho.
@@ -32,6 +34,14 @@ Uma jornada é identificada por organização, repositório (sem diferença entr
 A lista reúne análises antigas da mesma identidade sem excluir seus arquivos. Uma revisão nova cria outra versão. A mesma revisão concluída e criticidade retorna a análise existente, sem chamada à IA; a opção de reanalisar permite uma nova versão explícita. Enquanto uma análise estiver em andamento, a solicitação abre essa análise. Um bloqueio em disco serializa a preparação da mesma jornada entre processos. Depois de uma interrupção abrupta, verifique que não há preparação ativa antes de remover um arquivo residual de `/data/<tenant>/locks`.
 
 O botão “Reanalisar esta revisão” na jornada usa o commit selecionado e preserva as versões anteriores. Para mapear um commit novo, selecione o repositório no assistente e valide a branch/commit desejado. O seletor de histórico abre MD/JSON da análise escolhida. Relatórios antigos são preservados: reanalise para receber o novo formato. Análises de versões anteriores que não registravam subdiretório são agrupadas como raiz; não é possível inventar o subdiretório original.
+
+## Leitura do mapa e do relatório
+
+A aba **Mapa da jornada** começa pela visão geral: todos os serviços e recursos do manifesto, com relações repetidas agrupadas por origem, destino e tipo. Os números nas setas são ocorrências no fluxo, não volume de tráfego nem ordem de execução. Recursos de persistência representam acessos lógicos e incluem o serviço proprietário quando informado pelo motor.
+
+**Fluxo completo** mantém o diagrama integral do Markdown, incluindo decisões, caminhos de erro e ramificações. Use a busca e o seletor para centralizar um passo/componente em tamanho legível, arraste o mapa ou use as setas do teclado, ajuste o zoom e abra em tela cheia. A leitura de um manifesto inválido ou indisponível não impede o acesso ao diagrama completo do MD.
+
+As seções 1 e 2 do relatório permanecem visíveis. A seção 3 continua numerada e leva ao mapa acima. As seções 4 em diante começam recolhidas e podem ser abertas com clique, Enter ou Espaço. Todo o conteúdo permanece acessível; os arquivos exportados não são reduzidos. Estas melhorias de apresentação também se aplicam às análises existentes, sem reanalisar ou consumir IA.
 
 ## Billing e evolução
 

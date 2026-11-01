@@ -3775,3 +3775,221 @@ hr {
     flex: 1 1 145px;
   }
 }
+
+/* Readable journey overview, full-flow navigation and progressive report detail. */
+.journey-map-anchor {
+  display: grid;
+  gap: 24px;
+  min-width: 0;
+  scroll-margin-top: 24px;
+}
+.diagram-mode {
+  display: flex;
+  flex-wrap: wrap;
+  padding: 4px;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-soft);
+}
+.diagram-mode button {
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  padding: 10px 16px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.diagram-mode button.active {
+  background: var(--blue);
+  color: white;
+}
+.diagram-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+}
+.diagram-search {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  flex: 1;
+  min-width: min(100%, 260px);
+}
+.diagram-search label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 200px;
+  padding-left: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--muted);
+}
+.diagram-search input,
+.diagram-search select {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 10px;
+}
+.diagram-search input {
+  border: 0;
+}
+.diagram-search select {
+  border: 1px solid var(--border);
+  flex: 1;
+  min-width: 180px;
+  max-width: 100%;
+}
+.journey-diagram-viewport {
+  height: 680px;
+  cursor: grab;
+  background-color: #f5f7fb;
+  background-image: radial-gradient(#cdd7e5 1px, transparent 1px);
+  background-size: 20px 20px;
+  overscroll-behavior: contain;
+}
+.journey-diagram-viewport:active {
+  cursor: grabbing;
+}
+.journey-diagram-viewport:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -3px;
+}
+.journey-diagram-canvas {
+  position: relative;
+  margin-inline: auto;
+}
+.journey-diagram-svg {
+  position: absolute;
+  inset: 0 auto auto 0;
+  user-select: none;
+}
+.journey-diagram-svg .map-node-selected > rect,
+.journey-diagram-svg .map-node-selected > polygon,
+.journey-diagram-svg .map-node-selected > path {
+  stroke: #2563eb !important;
+  stroke-width: 4px !important;
+}
+.journey-diagram .graph-foot {
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.report-section {
+  border-top: 1px solid var(--border);
+}
+.report-section > h3,
+.report-section > summary {
+  margin: 0;
+  padding: 24px clamp(20px, 3vw, 40px);
+}
+.report-section h3 {
+  color: var(--ink);
+  font-size: 20px;
+  line-height: 1.5;
+}
+.report-section .journey-markdown {
+  padding-top: 0;
+  padding-bottom: 24px;
+}
+.report-section .journey-markdown > hr:last-child {
+  display: none;
+}
+.report-section > summary {
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  list-style: none;
+}
+.report-section > summary::-webkit-details-marker {
+  display: none;
+}
+.report-section > summary:hover {
+  background: var(--surface-soft);
+}
+.report-section > summary:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -3px;
+}
+.report-section > summary h3 {
+  margin: 0;
+}
+.report-section-action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--blue);
+  white-space: nowrap;
+  font-size: 14px;
+}
+.report-section:not([open]) .when-open,
+.report-section[open] .when-closed {
+  display: none;
+}
+.report-section[open] .report-section-action svg {
+  transform: rotate(180deg);
+}
+.report-map-link {
+  padding: 0 clamp(20px, 3vw, 40px) 24px;
+}
+.report-map-link p {
+  color: var(--muted);
+  line-height: 1.7;
+  margin: 0 0 16px;
+}
+.report-map-link a {
+  text-decoration: none;
+}
+.journey-table-scroll {
+  overscroll-behavior-x: contain;
+}
+.journey-markdown table:has(th:nth-child(6)) th:first-child,
+.journey-markdown table:has(th:nth-child(6)) td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--surface);
+  box-shadow: 1px 0 var(--border);
+  min-width: 230px;
+  max-width: 270px;
+}
+@media (max-width: 640px) {
+  .diagram-toolbar {
+    padding: 12px;
+  }
+  .diagram-search {
+    flex-basis: 100%;
+  }
+  .diagram-search label,
+  .diagram-search select {
+    flex-basis: 100%;
+    min-width: 0;
+  }
+  .journey-diagram-viewport {
+    height: 480px;
+  }
+  .report-section > summary {
+    gap: 12px;
+  }
+  .report-section h3 {
+    font-size: 18px;
+  }
+  .report-section-action > span {
+    display: none;
+  }
+  .journey-markdown table:has(th:nth-child(6)) th:first-child,
+  .journey-markdown table:has(th:nth-child(6)) td:first-child {
+    position: static;
+  }
+}

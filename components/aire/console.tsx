@@ -994,7 +994,6 @@ export function Console() {
             <span>
               AIRE <span className="muted">by Northeia</span>
             </span>
-            <span>LLM interpreta. Código decide.</span>
             <span>
               <span className="footer-dot" />
               {demo ? "Ambiente de demonstração" : "Console integrado"}
@@ -3339,13 +3338,7 @@ function Login({
   toggleTheme: () => void;
 }) {
   const [message, setMessage] = useState("");
-  const [workspace, setWorkspace] = useState("");
   useEffect(() => {
-    setWorkspace(
-      session.workspace ||
-        new URLSearchParams(location.search).get("workspace") ||
-        "",
-    );
     if (new URLSearchParams(location.search).has("auth_error"))
       setMessage(
         "Não foi possível concluir o acesso. Confira a vinculação do seu usuário à organização e tente novamente.",
@@ -3360,6 +3353,12 @@ function Login({
       );
       return;
     }
+    // The tenant portal is resolved on the server. Keep existing legacy SSO links.
+    const workspace =
+      session.workspace ||
+      (session.portal === "legacy"
+        ? new URLSearchParams(location.search).get("workspace")
+        : "");
     location.href =
       "/auth/" +
       provider +
@@ -3385,8 +3384,6 @@ function Login({
           </p>
           <div className="login-network">
             <Network size={100} strokeWidth={0.65} />
-            <span>Spring Boot</span>
-            <span>.NET / C#</span>
           </div>
         </div>
         <small>AIRE by Northeia</small>
@@ -3408,24 +3405,9 @@ function Login({
           <h2>
             {session.portal === "admin"
               ? "Administração Northeia"
-              : session.tenant || "Acesse seu workspace"}
+              : session.tenant || "Entre no AIRE"}
           </h2>
           <p>Continue com sua identidade corporativa.</p>
-          {(!session.portal || session.portal === "legacy") && (
-            <label className="field">
-              Workspace
-              <input
-                value={workspace}
-                onChange={(e) =>
-                  setWorkspace(e.target.value.trim().toLowerCase())
-                }
-                placeholder="Identificador informado pela sua organização"
-                maxLength={64}
-                autoComplete="organization"
-              />
-              <small>Deixe em branco para o workspace padrão.</small>
-            </label>
-          )}
           <button className="sso-button" onClick={() => login("microsoft")}>
             <MicrosoftIcon />
             Continuar com Microsoft
@@ -3450,7 +3432,9 @@ function Login({
                   seu acesso.
                 </p>
                 <p>
-                  Workspace: {session.onboardingIdentity.workspace || "padrão"}
+                  Organização:{" "}
+                  {session.onboardingIdentity.workspace ||
+                    "vínculo a confirmar"}
                   <br />
                   Provedor: {session.onboardingIdentity.provider}
                   <br />
@@ -3470,7 +3454,7 @@ function Login({
             <p>
               Seu acesso é definido pela organização.
               <br />
-              Cada workspace mantém seu próprio contexto.
+              Os dados da sua organização permanecem isolados.
             </p>
           </div>
           {preview && (

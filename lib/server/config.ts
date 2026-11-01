@@ -155,7 +155,16 @@ export function membership(
     )
       return [];
     if (tenant.sso) {
-      if (identity.workspace !== tenant.id) return [];
+      // A dedicated portal pins the workspace above. On the shared legacy
+      // portal, verified issuer + immutable membership identify a unique tenant.
+      // A tenant-specific OAuth application must still be selected before login.
+      if (
+        !identity.workspace &&
+        (identity.provider === "microsoft"
+          ? tenant.sso.microsoftClientIdEnv
+          : tenant.sso.googleClientIdEnv)
+      )
+        return [];
       if (
         identity.provider === "microsoft" &&
         (!tenant.sso.microsoftTenantId ||
