@@ -20,5 +20,10 @@ esses valores nunca são aceitos como autoridade vindos do navegador.
 Validação: TypeScript, 100 testes (incluindo quatro novos de autorização/isolamento),
 lint dos novos arquivos. Não houve validação visual em navegador ou implantação.
 Para habilitar a simulação, instalar também o overlay/configuração da branch do motor.
-A análise detalhada de logs/traces e a resolução de pré-requisitos dos monitores reais
-continuam limites explícitos da implementação inicial, descritos na documentação do motor.
+O painel mostra a cobertura de logs/spans, eventos relacionados, janela efetiva e
+análise dos monitores em detalhes expansíveis. Ausência no período não é apresentada
+como ausência de instrumentação. Regras de monitores reais são configuradas por política
+versionada no servidor; a edição visual da política permanece pendente.
+
+A main do front já era ancestral da branch. Foi preservada a correção remota que exige
+preenchimento explícito da tag de jornada (nenhum valor pré-selecionado). Sem deploy.

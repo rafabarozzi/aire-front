@@ -23,7 +23,17 @@ type Evaluation = {
     input: { mode: string };
     pause_reason?: string;
     recommendations: Rec[];
-    findings: { service?: string; signal?: string; status: string }[];
+    findings: {
+      service?: string;
+      signal?: string;
+      status: string;
+      matched_events?: number;
+      complete?: boolean;
+      window?: Record<string, unknown>;
+      monitor_checks?: unknown[];
+      unresolved_monitor_ids?: string[];
+      note?: string;
+    }[];
   };
 };
 
@@ -142,9 +152,53 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
           <details>
             <summary>Cobertura e evidências</summary>
             {current.data.findings.map((f, i) => (
-              <p key={i}>
-                {f.service} {f.signal}: {f.status}
-              </p>
+              <div key={i}>
+                <p>
+                  {f.service} · {f.signal}:{" "}
+                  {(
+                    {
+                      observed: "Sinal observado",
+                      no_events_in_window:
+                        "Nenhum evento no período consultado",
+                      access_denied: "Sem permissão de acesso",
+                      insufficient_evidence: "Evidência incompleta",
+                      identity_unconfirmed: "Identidade não confirmada",
+                      monitor_missing: "Monitor não localizado",
+                      monitor_requires_review: "Monitor requer revisão",
+                    } as Record<string, string>
+                  )[f.status] || f.status}
+                </p>
+                {f.matched_events !== undefined && (
+                  <p>
+                    {f.matched_events} eventos relacionados à jornada ·{" "}
+                    {f.complete ? "Consulta concluída" : "Cobertura parcial"}
+                  </p>
+                )}
+                {(f.window ||
+                  f.monitor_checks?.length ||
+                  f.unresolved_monitor_ids?.length) && (
+                  <details>
+                    <summary>Escopo, período e análise dos monitores</summary>
+                    <pre>
+                      {JSON.stringify(
+                        {
+                          period: f.window,
+                          checks: f.monitor_checks,
+                          review: f.unresolved_monitor_ids,
+                        },
+                        null,
+                        2,
+                      )}
+                    </pre>
+                  </details>
+                )}
+                {f.signal === "logs" || f.signal === "spans" ? (
+                  <p>
+                    Eventos consultados podem ser amostrados ou indexados.
+                    Ausência no período não comprova falta de instrumentação.
+                  </p>
+                ) : null}
+              </div>
             ))}
           </details>
           <label>
