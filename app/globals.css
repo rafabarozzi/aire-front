@@ -2262,19 +2262,23 @@ hr {
 }
 .integration-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
   gap: 22px;
 }
 .integration-card {
+  min-width: 0;
   padding: 25px;
 }
 .integration-top {
   display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 22px;
 }
-.integration-top > span {
+.integration-top > .integration-icon {
+  flex: 0 0 51px;
   width: 51px;
   height: 51px;
   display: grid;
@@ -4027,3 +4031,43 @@ hr {
 .setup-password button { position:absolute; right:6px; top:50%; transform:translateY(-50%); min-height:44px; padding:8px 12px; border:0; border-radius:6px; background:var(--surface-soft); color:var(--blue); font:inherit; font-size:14px; cursor:pointer; }
 .setup-password button:focus-visible, .login-onboarding-link:focus-visible { outline:2px solid var(--blue); outline-offset:3px; }
 .login-onboarding-link { display:block; margin-top:24px; color:var(--blue); text-align:center; text-underline-offset:4px; line-height:1.6; }
+
+/* Connection status must size to its text, independently from the icon. */
+.integration-top > .badge {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+/* Integration catalog: status text must remain readable at every viewport. */
+.connections-hub { display: grid; gap: 28px; }
+.connection-hub-heading { display:flex; justify-content:space-between; gap:20px; align-items:center; flex-wrap:wrap; }
+.connection-catalog-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,350px),1fr)); gap:20px; }
+.provider-card,.repo-catalog { padding:24px; min-width:0; }
+.provider-card-heading { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.provider-card-heading h3 { margin:0; flex:1; }
+.provider-card .badge { white-space:normal; overflow-wrap:anywhere; max-width:100%; }
+.provider-card details { margin:18px 0; line-height:1.65; }
+.provider-card p { line-height:1.65; overflow-wrap:anywhere; }
+.provider-repository { display:flex; justify-content:space-between; gap:16px; align-items:center; flex-wrap:wrap; padding:14px 0; border-bottom:1px solid var(--border); }
+.provider-repository > span { overflow-wrap:anywhere; min-width:0; flex:1 1 220px; }
+.connections-hub .connection-toolbar,.connection-editor .connection-toolbar { display:flex; flex-wrap:wrap; gap:10px; }
+.connection-editor { margin:auto; width:min(700px,calc(100vw - 32px)); max-height:84vh; padding:28px; overflow:auto; color:var(--text); background:var(--surface); border:1px solid var(--border); }
+.connection-editor::backdrop { background:#0009; }
+.connection-editor .field { display:grid; gap:8px; margin:18px 0; }
+.connection-editor input,.connection-editor select { width:100%; min-width:0; }
+.connection-editor textarea { min-height:130px; font-family:monospace; width:100%; }
+.connections-hub .field { margin:16px 0; }
+.connections-hub h2 { margin-bottom:12px; }
+
+.connections-hub { font-size:17px; line-height:1.6; }
+.connections-hub h1 { font-size:32px; line-height:1.2; color:var(--ink); }
+.connections-hub h2,.connection-editor h2 { font-size:22px; font-weight:650; color:var(--ink); }
+.connections-hub h3 { font-size:20px; font-weight:650; color:var(--ink); }
+.connections-hub section > p { margin-bottom:16px; }
+.provider-card .badge { font-size:13px; padding:4px 8px; }
+.provider-card summary { cursor:pointer; color:var(--blue); }
+.provider-card a { color:var(--blue); text-decoration:underline; text-underline-offset:3px; }
+.provider-card .connection-toolbar { margin-top:20px; }
+.connection-editor { font-size:17px; line-height:1.6; }

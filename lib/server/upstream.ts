@@ -1,3 +1,6 @@
+import { gitlabToken } from "./provider-auth.ts";
+import { providerFetch, providerJson } from "./provider-http.ts";
+import { sourceRepository } from "../aire/source-repository.ts";
 import { z } from "zod";
 import { AppError, allowedRepository, type Tenant } from "./config.ts";
 import { normalizeRepository } from "../aire/validation.ts";
@@ -162,13 +165,41 @@ export async function validateRepository(
     throw new AppError(
       422,
       "repository_format",
-      "Use uma URL HTTPS do GitHub ou organização/repositório.",
+      "Use uma URL HTTPS do GitHub/GitLab ou organização/repositório do GitHub.",
     );
   }
   allowedRepository(
     { ...tenant, repositories: await authorizedRepositories(tenant) },
     repository,
   );
+  if (repository.startsWith("https://gitlab.com/")) {
+    const path = sourceRepository("gitlab", repository).path;
+    const headers = { "PRIVATE-TOKEN": await gitlabToken(tenant) };
+    const base =
+      "https://gitlab.com/api/v4/projects/" + encodeURIComponent(path);
+    const info = z
+      .object({ default_branch: z.string(), visibility: z.string() })
+      .parse(await providerJson(await providerFetch(base, { headers })));
+    const branch = ref || info.default_branch;
+    if (branch.length > 250)
+      throw new AppError(422, "revision", "Informe uma revisão válida.");
+    const commit = z
+      .object({ id: z.string().regex(/^[0-9a-f]{40}$/) })
+      .parse(
+        await providerJson(
+          await providerFetch(
+            base + "/repository/commits/" + encodeURIComponent(branch),
+            { headers },
+          ),
+        ),
+      );
+    return {
+      repository,
+      branch,
+      revision: commit.id,
+      private: info.visibility !== "public",
+    };
+  }
   const info = z
     .object({ default_branch: z.string(), private: z.boolean() })
     .parse(await (await github(tenant, `/repos/${repository}`)).json());
@@ -209,6 +240,21 @@ export async function snapshot(
     { ...tenant, repositories: await authorizedRepositories(tenant) },
     repository,
   );
+  if (repository.startsWith("https://gitlab.com/")) {
+    const path = sourceRepository("gitlab", repository).path;
+    if (!/^[0-9a-f]{40}$/.test(revision))
+      throw new AppError(422, "revision", "Commit inválido.");
+    return boundedBody(
+      await providerFetch(
+        "https://gitlab.com/api/v4/projects/" +
+          encodeURIComponent(path) +
+          "/repository/archive.zip?sha=" +
+          revision,
+        { headers: { "PRIVATE-TOKEN": await gitlabToken(tenant) } },
+      ),
+      50 * 1024 * 1024,
+    );
+  }
   return boundedBody(
     await github(tenant, `/repos/${repository}/zipball/${revision}`, true),
     50 * 1024 * 1024,

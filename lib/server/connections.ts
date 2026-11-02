@@ -6,6 +6,8 @@ import {
   appendFile,
   unlink,
 } from "node:fs/promises";
+import { integrationSummary } from "./integrations.ts";
+import { modernGithubCredential } from "./provider-auth.ts";
 import { hkdfSync } from "node:crypto";
 import { join } from "node:path";
 import { CompactEncrypt, compactDecrypt } from "jose";
@@ -132,7 +134,10 @@ async function tokenFromState(tenant: Tenant, state: State) {
   }
 }
 export async function githubCredential(tenant: Tenant) {
-  return tokenFromState(tenant, await readState(tenant));
+  const modern = await modernGithubCredential(tenant);
+  return modern === undefined
+    ? tokenFromState(tenant, await readState(tenant))
+    : modern || undefined;
 }
 export async function authorizedRepositories(tenant: Tenant) {
   return (await readState(tenant)).repositories ?? tenant.repositories;
@@ -165,7 +170,19 @@ function view(tenant: Tenant, state: State): ConnectionsView {
   };
 }
 export async function connectionsView(tenant: Tenant) {
-  return view(tenant, await readState(tenant));
+  const result = view(tenant, await readState(tenant));
+  const modern = await integrationSummary(tenant, "github");
+  if (modern.revision) {
+    result.githubConfigured = modern.configured;
+    result.credential = modern.configured
+      ? {
+          label: modern.kind === "github-app" ? "GitHub App" : "Token GitHub",
+          source: "panel",
+          updatedAt: modern.updatedAt,
+        }
+      : null;
+  }
+  return result;
 }
 const queues = new Map<string, Promise<unknown>>();
 async function mutate(
