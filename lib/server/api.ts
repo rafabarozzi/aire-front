@@ -1,3 +1,4 @@
+import { readinessApi } from "./readiness-api.ts";
 import { z } from "zod";
 import { AppError } from "./config.ts";
 import {
@@ -399,6 +400,8 @@ export async function api(request: Request, path: string[]) {
         }
       }
     }
+    if (path[0] === "journeys" && path[1] && path[2] === "readiness")
+      return json(await readinessApi(request, path, () => body(request)));
     if (path[0] === "journeys" && path[1]) {
       const c = await context(
         request,
@@ -459,3 +462,4 @@ export async function api(request: Request, path: string[]) {
     );
   }
 }
+

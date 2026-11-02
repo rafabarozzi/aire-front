@@ -79,6 +79,10 @@ export async function readPolicy(tenant: string): Promise<RolePolicy> {
         "collectors:read",
         "collectors:manage",
         "usage:read",
+        "readiness:read",
+        "readiness:evaluate",
+        "readiness:approve",
+        "readiness:execute",
       ])
         if (!raw.admin.includes(permission)) raw.admin.push(permission);
     return policySchema.parse(raw);
@@ -207,3 +211,4 @@ export async function evolution(tenant: string) {
       "Análises agrupadas pelo mês de criação, com o estado conhecido atualmente. Efeitos operacionais serão medidos quando as ações da Etapa 2 forem executadas.",
   };
 }
+
