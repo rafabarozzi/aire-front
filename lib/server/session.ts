@@ -1,5 +1,11 @@
 import { EncryptJWT, jwtDecrypt } from "jose";
-import { AppError, isDemo, membership, type Identity } from "./config.ts";
+import {
+  AppError,
+  appOrigin,
+  isDemo,
+  membership,
+  type Identity,
+} from "./config.ts";
 import { defaultPolicy, type Permission, type Session } from "../aire/types.ts";
 import { readPolicy } from "./store.ts";
 import { isPlatformAdmin } from "./platform-identity.ts";
@@ -147,6 +153,7 @@ export async function sessionResponse(request: Request): Promise<
     portal: p.kind,
     workspace: p.tenant?.id,
     tenant: p.tenant?.name,
+    onboardingUrl: `${appOrigin()}/onboarding${p.tenant ? `?organization=${encodeURIComponent(p.tenant.id)}` : ""}`,
     version: "0.2.0",
     providers: portalProviders(request),
   };

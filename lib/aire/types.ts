@@ -35,6 +35,7 @@ export type Session = {
   portal?: "admin" | "customer" | "legacy";
   workspace?: string;
   version?: string;
+  onboardingUrl?: string;
   onboardingIdentity?: {
     provider: string;
     issuer: string;

@@ -33,6 +33,48 @@ async function api<T>(
   if (!r.ok) throw new Error(data.error || "Não foi possível continuar.");
   return data;
 }
+function PasswordField({
+  confirm = false,
+  creating = false,
+}: {
+  confirm?: boolean;
+  creating?: boolean;
+}) {
+  const [visible, setVisible] = useState(false);
+  const id = confirm ? "setup-confirm" : "setup-password";
+  return (
+    <div className="field">
+      <label htmlFor={id}>
+        {confirm ? "Confirme a senha" : creating ? "Crie sua senha" : "Senha"}
+      </label>
+      <div className="setup-password">
+        <input
+          id={id}
+          type={visible ? "text" : "password"}
+          name={confirm ? "confirm" : "password"}
+          autoComplete={creating ? "new-password" : "current-password"}
+          minLength={15}
+          maxLength={128}
+          required
+        />
+        <button
+          type="button"
+          aria-controls={id}
+          aria-pressed={visible}
+          aria-label={`${visible ? "Ocultar" : "Exibir"} ${confirm ? "confirmação da senha" : "senha"}`}
+          onClick={() => setVisible(!visible)}
+        >
+          {visible ? "Ocultar" : "Exibir"}
+        </button>
+      </div>
+      {!confirm && (
+        <small>
+          Use de 15 a 128 caracteres. Você pode usar uma frase como senha.
+        </small>
+      )}
+    </div>
+  );
+}
 export function OnboardingConsole() {
   const [session, setSession] = useState<Session | null>(null),
     [organization, setOrganization] = useState(""),
@@ -175,6 +217,22 @@ export function OnboardingConsole() {
           </>
         ) : !session ? (
           <form onSubmit={login} className="setup-form">
+            {!invite && (
+              <p>
+                Primeiro acesso? Abra o convite recebido por e-mail para criar
+                sua senha. Se já criou seu acesso, entre abaixo para continuar a
+                configuração do SSO.
+              </p>
+            )}
+            {invite && (
+              <button
+                type="button"
+                className="button secondary"
+                onClick={() => setInvite("")}
+              >
+                Já criei meu acesso — retomar configuração
+              </button>
+            )}
             <label className="field">
               Organização
               <input
@@ -194,33 +252,8 @@ export function OnboardingConsole() {
                 required
               />
             </label>
-            <label className="field">
-              {invite ? "Crie sua senha" : "Senha"}
-              <input
-                type="password"
-                name="password"
-                autoComplete={invite ? "new-password" : "current-password"}
-                minLength={15}
-                maxLength={128}
-                required
-              />
-              <small>
-                Use de 15 a 128 caracteres. Você pode usar uma frase como senha.
-              </small>
-            </label>
-            {invite && (
-              <label className="field">
-                Confirme a senha
-                <input
-                  type="password"
-                  name="confirm"
-                  autoComplete="new-password"
-                  minLength={15}
-                  maxLength={128}
-                  required
-                />
-              </label>
-            )}
+            <PasswordField creating={!!invite} />
+            {invite && <PasswordField confirm creating />}
             <button disabled={busy} className="button primary">
               {busy
                 ? "Aguarde…"

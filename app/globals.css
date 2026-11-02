@@ -4021,3 +4021,9 @@ hr {
 .setup-alert {border:1px solid var(--amber);background:var(--amber-bg);padding:16px;border-radius:10px;margin:20px 0;}
 .setup-page footer {text-align:center;margin:28px;color:var(--muted);}
 .setup-card .button {white-space:normal;}
+
+.setup-password { position: relative; }
+.setup-card .setup-password input { padding-right: 88px; }
+.setup-password button { position:absolute; right:6px; top:50%; transform:translateY(-50%); min-height:44px; padding:8px 12px; border:0; border-radius:6px; background:var(--surface-soft); color:var(--blue); font:inherit; font-size:14px; cursor:pointer; }
+.setup-password button:focus-visible, .login-onboarding-link:focus-visible { outline:2px solid var(--blue); outline-offset:3px; }
+.login-onboarding-link { display:block; margin-top:24px; color:var(--blue); text-align:center; text-underline-offset:4px; line-height:1.6; }

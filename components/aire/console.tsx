@@ -3397,6 +3397,9 @@ function Login({
             Continuar com Google
             <ArrowRight size={16} />
           </button>
+          <a className="login-onboarding-link" href={session.onboardingUrl || "/onboarding"}>
+            Primeiro acesso ou configurar SSO
+          </a>
           {message && (
             <div className="error-panel" role="alert">
               {message}

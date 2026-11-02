@@ -349,3 +349,14 @@ test("explicit reanalysis creates one new version and repeating it reuses the ac
   assert.equal((await listJourneys("lab")).length, 1);
   assert.equal((await journeyHistory("lab", j)).length, 2);
 });
+
+test("signed-out portals resume setup at the trusted central origin", async () => {
+  const central = await sessionResponse(new Request(origin + "/api/console/session"));
+  assert.equal(central.authenticated, false);
+  assert.equal(central.onboardingUrl, origin + "/onboarding");
+  const client = await sessionResponse(new Request(customer + "/api/console/session", {
+    headers: { "x-forwarded-host": "untrusted.example" },
+  }));
+  assert.equal(client.authenticated, false);
+  assert.equal(client.onboardingUrl, origin + "/onboarding?organization=lab");
+});

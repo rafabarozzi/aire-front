@@ -64,3 +64,9 @@ O avatar ao lado do remetente é decidido pelo Outlook/Gmail/contatos do destina
 Uma caixa compartilhada de até 50 GB, no uso básico, não requer licença própria; o usuário que a acessa precisa de uma caixa licenciada Exchange Online. Recursos avançados podem ter requisitos adicionais.
 
 Referências oficiais: [Criar caixa compartilhada](https://learn.microsoft.com/en-us/microsoft-365/admin/email/create-a-shared-mailbox) e [Licenciamento e uso](https://learn.microsoft.com/en-us/microsoft-365/admin/email/about-shared-mailboxes).
+
+### Retomar a configuração
+
+Na tela de login, use **Primeiro acesso ou configurar SSO**. O link leva ao portal central de onboarding; quando aberto pelo portal de um cliente, preenche a organização correspondente. Uma sessão temporária válida retoma a configuração. Sem sessão, informe organização, e-mail convidado e senha já criada. Para criar a senha pela primeira vez, use o convite recebido por e-mail. O formulário de convite também oferece **Já criei meu acesso — retomar configuração**.
+
+Os campos de senha e confirmação possuem controles independentes **Exibir/Ocultar**. As senhas começam ocultas. Os prazos e as permissões restritas do acesso temporário permanecem os mesmos.
