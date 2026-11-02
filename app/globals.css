@@ -2262,19 +2262,23 @@ hr {
 }
 .integration-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
   gap: 22px;
 }
 .integration-card {
+  min-width: 0;
   padding: 25px;
 }
 .integration-top {
   display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 22px;
 }
-.integration-top > span {
+.integration-top > .integration-icon {
+  flex: 0 0 51px;
   width: 51px;
   height: 51px;
   display: grid;
@@ -4027,3 +4031,11 @@ hr {
 .setup-password button { position:absolute; right:6px; top:50%; transform:translateY(-50%); min-height:44px; padding:8px 12px; border:0; border-radius:6px; background:var(--surface-soft); color:var(--blue); font:inherit; font-size:14px; cursor:pointer; }
 .setup-password button:focus-visible, .login-onboarding-link:focus-visible { outline:2px solid var(--blue); outline-offset:3px; }
 .login-onboarding-link { display:block; margin-top:24px; color:var(--blue); text-align:center; text-underline-offset:4px; line-height:1.6; }
+
+/* Connection status must size to its text, independently from the icon. */
+.integration-top > .badge {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  text-align: center;
+}

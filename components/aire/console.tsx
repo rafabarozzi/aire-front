@@ -2954,7 +2954,7 @@ function Integration({
   return (
     <section className="panel integration-card">
       <div className="integration-top">
-        <span>{icon}</span>
+        <span className="integration-icon">{icon}</span>
         <Badge tone={status === "Configurado" ? "green" : "blue"}>
           {status}
         </Badge>
