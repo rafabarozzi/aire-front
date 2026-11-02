@@ -40,7 +40,7 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
   const [history, setHistory] = useState<Evaluation[]>([]),
     [error, setError] = useState("");
   const [selected, setSelected] = useState<Record<string, boolean>>({}),
-    [tags, setTags] = useState("journey:checkout");
+    [tags, setTags] = useState("");
   const [perItem, setPerItem] = useState<Record<string, string>>({}),
     [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState(false),
@@ -150,6 +150,7 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
           <label>
             Tags para o lote (confirme a tag de jornada)
             <input
+              placeholder="Informe a tag da jornada, por exemplo journey:minha-jornada"
               value={tags}
               onChange={(e) => {
                 setTags(e.target.value);
