@@ -249,3 +249,17 @@ export function allowedRepository(tenant: Tenant, repository: string) {
       "Este repositório não está autorizado para a sua organização.",
     );
 }
+
+// Customer Microsoft credentials never fall back to the operator application.
+export function microsoftCredentials(tenant?: Tenant) {
+  const prefix = tenant ? "AIRE_CUSTOMER_MICROSOFT" : "AIRE_MICROSOFT";
+  const idEnv = tenant?.sso?.microsoftClientIdEnv;
+  const secretEnv = tenant?.sso?.microsoftClientSecretEnv;
+  // An explicit override must provide the whole pair.
+  if (!!idEnv !== !!secretEnv)
+    return { clientId: undefined, clientSecret: undefined };
+  return {
+    clientId: process.env[idEnv || `${prefix}_CLIENT_ID`],
+    clientSecret: process.env[secretEnv || `${prefix}_CLIENT_SECRET`],
+  };
+}

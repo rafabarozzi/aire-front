@@ -3,6 +3,7 @@ import { isPlatformAdmin } from "./platform-identity.ts";
 import * as oidc from "openid-client";
 import {
   AppError,
+  microsoftCredentials,
   membership,
   tenants,
   type Identity,
@@ -53,16 +54,19 @@ export function identityConnection(
       "provider",
       "Google não está autorizado neste workspace.",
     );
-  const keyPrefix = provider === "microsoft" ? "microsoft" : "google";
-  const clientId =
-      process.env[
-        tenant?.sso?.[`${keyPrefix}ClientIdEnv`] || prefix + "_CLIENT_ID"
-      ],
-    clientSecret =
-      process.env[
-        tenant?.sso?.[`${keyPrefix}ClientSecretEnv`] ||
-          prefix + "_CLIENT_SECRET"
-      ];
+  const { clientId, clientSecret } =
+    provider === "microsoft"
+      ? microsoftCredentials(tenant)
+      : {
+          clientId:
+            process.env[
+              tenant?.sso?.googleClientIdEnv || prefix + "_CLIENT_ID"
+            ],
+          clientSecret:
+            process.env[
+              tenant?.sso?.googleClientSecretEnv || prefix + "_CLIENT_SECRET"
+            ],
+        };
   if (!clientId || !clientSecret)
     throw new AppError(
       503,

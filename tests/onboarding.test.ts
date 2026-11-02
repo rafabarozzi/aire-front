@@ -71,7 +71,9 @@ beforeEach(async () => {
     ]),
     AIRE_RESEND_API_KEY: "synthetic",
     AIRE_EMAIL_FROM: "AIRE <setup@example.com>",
-    AIRE_MICROSOFT_CLIENT_ID: "synthetic",
+    AIRE_MICROSOFT_CLIENT_ID: "operator-app",
+    AIRE_CUSTOMER_MICROSOFT_CLIENT_ID: "synthetic",
+    AIRE_CUSTOMER_MICROSOFT_CLIENT_SECRET: "customer-secret",
     AIRE_MICROSOFT_CLIENT_SECRET: "synthetic",
     AIRE_GOOGLE_CLIENT_ID: "synthetic",
     AIRE_GOOGLE_CLIENT_SECRET: "synthetic",
@@ -533,6 +535,7 @@ test("OIDC authorization code callback validates signed ID token and records onl
     );
     assert.match(start.headers.get("location")!, /idp.example/);
     const authUrl = new URL(start.headers.get("location")!);
+    assert.equal(authUrl.searchParams.get("client_id"), "synthetic");
     nonce = authUrl.searchParams.get("nonce")!;
     assert.equal(authUrl.searchParams.get("code_challenge_method"), "S256");
     const flowCookie = start.headers.get("set-cookie")!.split(";")[0];

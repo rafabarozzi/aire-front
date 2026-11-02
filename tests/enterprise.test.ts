@@ -64,7 +64,9 @@ beforeEach(async () => {
     },
   ]);
   process.env.AIRE_MICROSOFT_TENANT_ID = otherMs;
-  process.env.AIRE_MICROSOFT_CLIENT_ID = "synthetic";
+  process.env.AIRE_MICROSOFT_CLIENT_ID = "operator-app";
+  process.env.AIRE_CUSTOMER_MICROSOFT_CLIENT_ID = "customer-app";
+  process.env.AIRE_CUSTOMER_MICROSOFT_CLIENT_SECRET = "customer-secret";
   process.env.AIRE_MICROSOFT_CLIENT_SECRET = "synthetic";
   process.env.AIRE_GOOGLE_CLIENT_ID = "synthetic";
   process.env.AIRE_GOOGLE_CLIENT_SECRET = "synthetic";
@@ -440,4 +442,28 @@ test("public source upload authenticates collector before reading a large body",
   assert.equal(result.status, 401);
   assert.equal(checked, true);
   assert.equal(req.bodyUsed, false);
+});
+
+test("customer Microsoft application is isolated from operator credentials", () => {
+  process.env.AIRE_TENANTS_JSON = JSON.stringify([customer(true)]);
+  process.env.AIRE_MICROSOFT_TENANT_ID = "11111111-1111-4111-8111-111111111111";
+  assert.equal(identityConnection("microsoft").clientId, "operator-app");
+  assert.equal(
+    identityConnection("microsoft", "alpha").clientId,
+    "customer-app",
+  );
+  assert.equal(
+    identityConnection("microsoft", "alpha").clientSecret,
+    "customer-secret",
+  );
+  const custom = customer(true);
+  custom.sso!.microsoftClientIdEnv = "TEST_CUSTOM_ID";
+  process.env.TEST_CUSTOM_ID = "custom-app";
+  assert.throws(() => identityConnection("microsoft", "alpha", custom));
+  custom.sso!.microsoftClientSecretEnv = "TEST_CUSTOM_SECRET";
+  process.env.TEST_CUSTOM_SECRET = "custom-secret";
+  assert.equal(identityConnection("microsoft", "alpha", custom).clientId, "custom-app");
+  delete process.env.AIRE_CUSTOMER_MICROSOFT_CLIENT_SECRET;
+  assert.throws(() => identityConnection("microsoft", "alpha"));
+  assert.equal(identityConnection("microsoft").clientId, "operator-app");
 });

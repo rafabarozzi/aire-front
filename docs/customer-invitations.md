@@ -70,3 +70,20 @@ Referências oficiais: [Criar caixa compartilhada](https://learn.microsoft.com/e
 Na tela de login, use **Primeiro acesso ou configurar SSO**. O link leva ao portal central de onboarding; quando aberto pelo portal de um cliente, preenche a organização correspondente. Uma sessão temporária válida retoma a configuração. Sem sessão, informe organização, e-mail convidado e senha já criada. Para criar a senha pela primeira vez, use o convite recebido por e-mail. O formulário de convite também oferece **Já criei meu acesso — retomar configuração**.
 
 Os campos de senha e confirmação possuem controles independentes **Exibir/Ocultar**. As senhas começam ocultas. Os prazos e as permissões restritas do acesso temporário permanecem os mesmos.
+
+### Aplicativo Microsoft separado para clientes
+
+O aplicativo multitenant **AIRE — Clientes** pertence ao Entra corporativo da Northeia. Cada cliente autoriza seu uso no próprio diretório. O Tenant ID salvo no onboarding sempre identifica o diretório do cliente, não necessariamente o diretório que publicou o aplicativo.
+
+No servidor, preserve `AIRE_MICROSOFT_TENANT_ID`, `AIRE_MICROSOFT_CLIENT_ID` e `AIRE_MICROSOFT_CLIENT_SECRET`: sustentam o login administrativo. Adicione em `.env.production`:
+
+```dotenv
+AIRE_CUSTOMER_MICROSOFT_CLIENT_ID=client-id-do-aplicativo-de-clientes
+AIRE_CUSTOMER_MICROSOFT_CLIENT_SECRET=valor-do-segredo-do-aplicativo-de-clientes
+```
+
+Recrie o container para carregar as variáveis. O Compose Contabo usa esse arquivo como `env_file`. Não há fallback das credenciais Microsoft de clientes para as administrativas. Organizações com substituições explícitas de credenciais mantêm esse suporte; as referências de Client ID e segredo devem ser configuradas juntas. Google mantém a configuração existente.
+
+Cadastre como plataforma Web o retorno central `https://aire.northeia.com/onboarding/auth/microsoft` e o retorno operacional de cada portal (por exemplo, `https://northeia-lab.northeia.com/auth/microsoft`). O teste de onboarding usa o mesmo aplicativo de clientes que o login operacional. A validação continua exigindo issuer e Tenant ID correspondentes à organização; a biblioteca OIDC valida também assinatura e audience.
+
+Migração: antes de atualizar uma instalação que usava o aplicativo global para clientes, configure o novo par. Se for necessário manter temporariamente o mesmo aplicativo para clientes existentes, configure explicitamente esse par com suas credenciais atuais. Não altere as variáveis administrativas. Após a atualização, valide o login administrativo em outra janela e teste o SSO da organização com sua conta corporativa. O teste local não substitui a validação real do consentimento e da configuração no Entra.

@@ -304,10 +304,10 @@ export function OnboardingConsole() {
                     />
                   </label>
                   <p>
-                    Use o diretório corporativo que já possui seu domínio. No
-                    Entra, autorize o aplicativo AIRE. A Northeia deve
-                    configurar esse aplicativo para aceitar contas de outras
-                    organizações.
+                    Use o diretório corporativo que já possui seu domínio.
+                    Durante o teste, autorize o aplicativo AIRE — Clientes no
+                    Entra da sua empresa. A Northeia gerencia o Client ID e a
+                    credencial; você não precisa criar outro aplicativo.
                   </p>
                   {(["admin", "engineer", "viewer"] as const).map((role) => (
                     <label className="field" key={role}>

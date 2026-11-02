@@ -1,4 +1,10 @@
-import { AppError, appOrigin, tenants, providers } from "./config.ts";
+import {
+  AppError,
+  appOrigin,
+  tenants,
+  providers,
+  microsoftCredentials,
+} from "./config.ts";
 export function portal(request: Request) {
   const origin = appOrigin();
   if (process.env.AIRE_PORTAL_MODE !== "multi")
@@ -29,13 +35,12 @@ export function portalProviders(request: Request) {
   const p = portal(request),
     sso = p.tenant?.sso;
   if (!p.tenant) return providers();
+  const credentials = microsoftCredentials(p.tenant);
   return {
     microsoft: !!(
       sso?.microsoftTenantId &&
-      process.env[sso.microsoftClientIdEnv || "AIRE_MICROSOFT_CLIENT_ID"] &&
-      process.env[
-        sso.microsoftClientSecretEnv || "AIRE_MICROSOFT_CLIENT_SECRET"
-      ]
+      credentials.clientId &&
+      credentials.clientSecret
     ),
     google: !!(
       sso?.googleDomains.length &&
