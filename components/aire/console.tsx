@@ -70,6 +70,7 @@ import {
   topologyEdges,
 } from "@/lib/aire/demo";
 import { JourneyReport } from "./journey-report";
+import { ReadinessPanel } from "./readiness-panel";
 import { normalizeRepository, journeyInputSchema } from "@/lib/aire/validation";
 import { ApiError, request } from "@/lib/aire/client";
 import { connectionRecovery } from "@/lib/aire/connection-recovery";
@@ -86,6 +87,10 @@ export function download(
   setTimeout(() => URL.revokeObjectURL(href), 1000);
 }
 const permissionLabels: Record<Permission, string> = {
+  "readiness:read": "Ver prontidão operacional",
+  "readiness:evaluate": "Avaliar prontidão",
+  "readiness:approve": "Aceitar recomendações",
+  "readiness:execute": "Executar monitores aprovados",
   "journeys:read": "Visualizar jornadas",
   "journeys:create": "Mapear jornadas",
   "artifacts:read": "Exportar artefatos",
@@ -2064,6 +2069,7 @@ function JourneyDetail({
       </div>
       {tab === "mapa" ? (
         !demo ? (
+          <>
           <JourneyReport
             key={j.id}
             analysisId={j.id}
@@ -2071,6 +2077,8 @@ function JourneyDetail({
             canRead={canExport}
             revision={reportRevision}
           />
+          {j.status === "COMPLETED" && <ReadinessPanel analysisId={j.id} />}
+          </>
         ) : (
           <div className="detail-grid">
             <section className="panel graph-panel">
@@ -3450,3 +3458,4 @@ function Login({
     </div>
   );
 }
+

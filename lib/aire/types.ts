@@ -1,4 +1,8 @@
 export const permissions = [
+  "readiness:read",
+  "readiness:evaluate",
+  "readiness:approve",
+  "readiness:execute",
   "journeys:read",
   "journeys:create",
   "artifacts:read",
@@ -96,13 +100,15 @@ export type RolePolicy = Record<Role, Permission[]>;
 export const defaultPolicy: RolePolicy = {
   admin: [...permissions],
   engineer: [
+    "readiness:read",
+    "readiness:evaluate",
     "journeys:read",
     "journeys:create",
     "artifacts:read",
     "connections:read",
     "collectors:read",
   ],
-  viewer: ["journeys:read", "artifacts:read"],
+  viewer: ["readiness:read", "journeys:read", "artifacts:read"],
 };
 export const statusLabels: Record<AnalysisStatus, string> = {
   AWAITING_SOURCE: "Aguardando código",
@@ -116,3 +122,4 @@ export const statusLabels: Record<AnalysisStatus, string> = {
   COMPLETED: "Análise concluída",
   FAILED: "Falha na análise",
 };
+
