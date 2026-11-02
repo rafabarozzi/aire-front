@@ -1,6 +1,9 @@
+import { sourceRepository } from "./source-repository.ts";
 import { z } from "zod";
 import { permissions } from "./types.ts";
 export function normalizeRepository(value: string): string {
+  if (value.trim().startsWith("https://gitlab.com/"))
+    return sourceRepository("gitlab", value).url;
   const clean = value
     .trim()
     .replace(/\/$/, "")
@@ -13,7 +16,7 @@ export function normalizeRepository(value: string): string {
     repo.split("/").some((x) => x === "." || x === "..")
   )
     throw new Error(
-      "Use uma URL do GitHub ou organização/repositório, sem parâmetros.",
+      "Use uma URL HTTPS do GitHub/GitLab ou organização/repositório do GitHub, sem parâmetros.",
     );
   return repo;
 }
