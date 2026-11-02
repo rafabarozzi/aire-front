@@ -48,3 +48,19 @@ O operador Northeia pode cadastrar uma organização em rascunho sem SSO e convi
 ## Validação
 
 Testes automatizados usam e-mail sintético e provedor simulado, sem envio real. Cobrem restrições de acesso, CSRF, uso único, expiração, reenvio, revogação, grupos e conclusão. A entrega real e o login real no Entra/Google precisam ser validados com o remetente e o aplicativo configurados no ambiente publicado.
+
+## Identidade do remetente e convite visual
+
+Os convites são enviados com versão HTML e texto simples: identidade AIRE, nome da organização, três etapas e botão **Configurar meu acesso**, além de um link alternativo. A versão HTML usa tabelas e estilos inline, sem imagens remotas, fontes externas ou pixels de rastreamento. O botão mantém o token no fragmento do endereço. Mantenha o rastreamento de cliques e aberturas desativado no domínio Resend usado para convites. O renderizador do cliente de e-mail pode modificar cores, espaçamentos ou cantos.
+
+O avatar ao lado do remetente é decidido pelo Outlook/Gmail/contatos do destinatário, independentemente do HTML. Um alias da caixa pessoal pode ser resolvido pelo Outlook como a mesma pessoa. Para separar a identidade, use uma caixa compartilhada Microsoft 365 com endereço próprio:
+
+1. Remova somente o alias `onboarding@northeia.com` da conta Rafael, preservando a conta, o endereço principal e as mensagens.
+2. Em **Microsoft 365 Admin → Equipes e grupos → Caixas de correio compartilhadas**, crie uma caixa chamada **AIRE by Northeia**, endereço `onboarding@northeia.com`. Aguarde a liberação do endereço se ele ainda constar em uso.
+3. Adicione Rafael como membro. Para responder pelo Outlook com a marca, conceda **Acesso total** e **Enviar como**. Mantenha o login direto da caixa compartilhada bloqueado.
+4. Mantenha o envio automatizado pelo Resend e `AIRE_EMAIL_FROM="AIRE by Northeia <onboarding@northeia.com>"`. Não precisa alterar a chave do Resend nem os MX Microsoft por causa dessa mudança.
+5. Envie um novo convite após a atualização. Mensagens antigas e contatos em cache podem continuar exibindo a foto anterior. O HTML não garante o avatar em todos os clientes.
+
+Uma caixa compartilhada de até 50 GB, no uso básico, não requer licença própria; o usuário que a acessa precisa de uma caixa licenciada Exchange Online. Recursos avançados podem ter requisitos adicionais.
+
+Referências oficiais: [Criar caixa compartilhada](https://learn.microsoft.com/en-us/microsoft-365/admin/email/create-a-shared-mailbox) e [Licenciamento e uso](https://learn.microsoft.com/en-us/microsoft-365/admin/email/about-shared-mailboxes).

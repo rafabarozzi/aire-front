@@ -1,3 +1,4 @@
+import { invitationEmail } from "./invitation-email.ts";
 import {
   mkdir,
   readFile,
@@ -406,8 +407,7 @@ export async function onboardingOperator(
       body: JSON.stringify({
         from: process.env.AIRE_EMAIL_FROM,
         to: [recipient],
-        subject: `Configure o acesso da ${t.name} ao AIRE`,
-        text: `Você foi convidado para configurar o Single Sign-On da organização ${t.name}.\n\nAbra este endereço para criar seu acesso local de configuração:\n${link}\n\nO convite é de uso único e vence em 24 horas. O acesso local permite somente configurar o SSO, por até 7 dias, e será encerrado após a confirmação do login corporativo.\n\nAIRE by Northeia`,
+        ...invitationEmail(t.name, link),
       }),
     });
     accepted = r.ok;
