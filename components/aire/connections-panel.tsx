@@ -11,8 +11,18 @@ import {
 } from "lucide-react";
 import { ProviderLogo } from "./provider-logo";
 import "./connections-panel.css";
+import { importedPem } from "@/lib/aire/pem";
 import { request } from "@/lib/aire/client";
 import type { ConnectionsView, Session } from "@/lib/aire/types";
+type RepositoryHealth = {
+  repository: string;
+  status: "unknown" | "ready" | "failed";
+  stale: boolean;
+  checkedAt?: string;
+  branch?: string;
+  revision?: string;
+  message?: string;
+};
 type Provider = "github" | "gitlab" | "datadog" | "dynatrace";
 type Connection = {
   provider: Provider;
@@ -164,6 +174,11 @@ export function ConnectionsPanel({
   onMap: (r?: string) => void;
   canMap: boolean;
 }) {
+  const [health, setHealth] = useState<Record<string, RepositoryHealth>>({});
+  const [validating, setValidating] = useState<Record<string, boolean>>({});
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [pemNotice, setPemNotice] = useState("");
+  const inFlight = useRef(new Set<string>());
   const repositoryCatalog = useRef<HTMLDetailsElement>(null);
   const [data, setData] = useState<ConnectionsView | null>(null),
     [connections, setConnections] = useState<Connection[]>([]);
@@ -189,6 +204,78 @@ export function ConnectionsPanel({
     repository?: string;
   } | null>(null);
   const manage = !demo && session.permissions.includes("connections:manage");
+  async function validateNow(repository: string) {
+    if (inFlight.current.has(repository)) return;
+    inFlight.current.add(repository);
+    setValidating(v => ({ ...v, [repository]: true }));
+    setValidationErrors(v => ({ ...v, [repository]: "" }));
+    try {
+      const result = await request<RepositoryHealth>("connections/repository-health", {
+        method: "POST", body: JSON.stringify({ repository, force: true }),
+      });
+      setHealth(v => ({ ...v, [repository]: result }));
+    } catch {
+      setValidationErrors(v => ({ ...v, [repository]: "Validação indisponível. Tente novamente." }));
+      setHealth(v => ({ ...v, [repository]: { ...v[repository], repository, stale: true } }));
+    } finally {
+      inFlight.current.delete(repository);
+      setValidating(v => ({ ...v, [repository]: false }));
+    }
+  }
+  const healthVersion = JSON.stringify([data?.revision, data?.repositories, connections.map(c => [c.provider, c.revision])]);
+  useEffect(() => {
+    if (demo || !data) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    async function cycle() {
+      try {
+        const results = await request<RepositoryHealth[]>("connections/repository-health");
+        if (!active) return;
+        setHealth(Object.fromEntries(results.map(r => [r.repository, r])));
+        for (const r of results) {
+          if (!active || document.visibilityState === "hidden") break;
+          if (!manage || !r.stale || inFlight.current.has(r.repository)) continue;
+          inFlight.current.add(r.repository);
+          setValidating(v => ({ ...v, [r.repository]: true }));
+          try {
+            const checked = await request<RepositoryHealth>("connections/repository-health", {
+              method: "POST", body: JSON.stringify({ repository: r.repository }),
+            });
+            if (active) {
+              setHealth(v => ({ ...v, [r.repository]: checked }));
+              setValidationErrors(v => ({ ...v, [r.repository]: "" }));
+            }
+          } catch {
+            if (active) setValidationErrors(v => ({ ...v, [r.repository]: "Validação indisponível. Tente novamente." }));
+          } finally {
+            inFlight.current.delete(r.repository);
+            if (active) setValidating(v => ({ ...v, [r.repository]: false }));
+          }
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      } catch {
+        if (active) setError("Não foi possível atualizar os estados dos repositórios.");
+      } finally {
+        if (active) timer = setTimeout(cycle, 60_000);
+      }
+    }
+    void cycle();
+    return () => { active = false; clearTimeout(timer); };
+    // The serialized version changes only when repository or credential configuration changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demo, manage, healthVersion]);
+  async function importPem(file?: File) {
+    setPemNotice("");
+    if (!file) return;
+    try {
+      if (file.size > 8192) throw new Error();
+      const content = importedPem(file.name, await file.text());
+      setFields(v => ({ ...v, privateKey: content }));
+      setPemNotice("Arquivo PEM importado. Salve para aplicar a credencial.");
+    } catch {
+      setPemNotice("Importação falhou. Selecione uma chave privada .pem válida de até 8 KB.");
+    }
+  }
   async function refresh() {
     const [d, c] = await Promise.all([
       request<ConnectionsView>("connections"),
@@ -240,6 +327,7 @@ export function ConnectionsPanel({
       appId: c?.appId || "",
       installationId: c?.installationId || "",
     });
+    setPemNotice("");
     setEditing(p);
     setError("");
   }
@@ -570,6 +658,7 @@ export function ConnectionsPanel({
             onChange={(e) => setRegisteredSearch(e.target.value)}
           />
         </label>
+        <p className="repository-health-help">Acesso e revisão verificados a cada 15 minutos enquanto esta página estiver aberta por um administrador. Use Validar para checar agora.</p>
         {!data?.repositories.length && (
           <p>Adicione seu primeiro repositório para começar.</p>
         )}
@@ -579,28 +668,26 @@ export function ConnectionsPanel({
           )
           .map((r) => (
             <div className="provider-repository" key={r}>
-              <span>
-                <b>
-                  {r.startsWith("https://gitlab.com/") ? "GitLab" : "GitHub"}
-                </b>{" "}
-                · {r}
-              </span>
+              <div className="repository-identity">
+                <span><b>{r.startsWith("https://gitlab.com/") ? "GitLab" : "GitHub"}</b> · {r}</span>
+                <div className="repository-health" role="status" aria-live="polite">
+                  <strong data-state={validating[r] ? "checking" : health[r]?.stale ? "unknown" : health[r]?.status || "unknown"}>
+                    {validating[r] ? "Validando…" : health[r]?.stale && health[r]?.checkedAt ? "Revalidar acesso" : health[r]?.status === "ready" ? "Pronto para mapear" : health[r]?.status === "failed" ? "Falha na validação" : "Ainda não validado"}
+                  </strong>
+                  {health[r]?.checkedAt && <small>Última checagem: {new Date(health[r].checkedAt!).toLocaleString("pt-BR")}</small>}
+                  {health[r]?.status === "ready" && <small>{health[r].branch} · {health[r].revision?.slice(0, 8)}</small>}
+                  {health[r]?.status === "failed" && <small>{health[r].message}</small>}
+                  {validationErrors[r] && <small role="alert">{validationErrors[r]}</small>}
+                </div>
+              </div>
               <div className="connection-toolbar">
                 {manage && (
                   <button
                     className="button secondary"
-                    disabled={busy}
-                    onClick={() =>
-                      run(async () => {
-                        await request("repositories/validate", {
-                          method: "POST",
-                          body: JSON.stringify({ repository: r }),
-                        });
-                        setNotice("Repositório e revisão validados: " + r);
-                      })
-                    }
+                    disabled={busy || validating[r]}
+                    onClick={() => void validateNow(r)}
                   >
-                    Validar
+                    {validating[r] ? "Validando…" : "Validar"}
                   </button>
                 )}
                 {manage && (
@@ -773,12 +860,21 @@ export function ConnectionsPanel({
               <>
                 {field("appId", "App ID ou Client ID")}
                 {field("installationId", "Installation ID")}
+                <label className="field">Ou importe o arquivo .pem
+                  <input type="file" accept=".pem" disabled={busy} onChange={e => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    void importPem(file);
+                  }} />
+                </label>
+                {pemNotice && <p role="status">{pemNotice}</p>}
                 <label className="field">
-                  Chave privada PEM
+                  Cole o conteúdo da chave privada PEM
                   <textarea
                     required
                     autoComplete="off"
                     spellCheck={false}
+                    placeholder="-----BEGIN RSA PRIVATE KEY-----"
                     value={fields.privateKey || ""}
                     onChange={(e) =>
                       setFields({ ...fields, privateKey: e.target.value })

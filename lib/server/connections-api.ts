@@ -1,3 +1,4 @@
+import { checkRepositoryHealth, repositoryHealth } from "./repository-health.ts";
 import { z } from "zod";
 import {
   integrationSchema,
@@ -28,6 +29,17 @@ export async function connectionsApi(
   readBody: () => Promise<unknown>,
 ) {
   const c = await context(request);
+  if (path.length === 2 && path[1] === "repository-health") {
+    if (request.method === "GET" && (c.permissions.includes("connections:read") || c.permissions.includes("connections:manage"))) {
+      const view = await connectionsView(c.tenant);
+      return Promise.all(view.repositories.map(r => repositoryHealth(c.tenant, r)));
+    }
+    if (request.method === "POST" && c.permissions.includes("connections:manage")) {
+      const b = z.object({ repository: z.string().max(500), force: z.boolean().default(false) }).strict().parse(await readBody());
+      return checkRepositoryHealth(c.tenant, b.repository, b.force);
+    }
+    throw new AppError(403, "forbidden", "Seu perfil não permite esta operação.");
+  }
   if (path[1] === "integrations") {
     if (
       path.length === 2 &&

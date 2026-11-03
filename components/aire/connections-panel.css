@@ -133,3 +133,13 @@
     flex: 1 1 auto;
   }
 }
+
+.repository-identity { min-width: 0; overflow-wrap: anywhere; }
+.repository-health { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .75rem; margin-top: .5rem; font-size: .8rem; }
+.repository-health strong { border: 1px solid currentColor; border-radius: 999px; padding: .2rem .6rem; font-weight: 500; }
+.repository-health strong[data-state="ready"] { color: #14845f; }
+.repository-health strong[data-state="failed"] { color: #cb4154; }
+.repository-health small, .repository-health-help { color: var(--muted-foreground); }
+.repository-health-help { font-size: .8rem; }
+.provider-repository .connection-toolbar { flex-shrink: 0; flex-wrap: wrap; }
+@media (max-width: 900px) { .provider-repository { flex-wrap: wrap; gap: 1rem; } }
