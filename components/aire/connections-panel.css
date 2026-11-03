@@ -180,3 +180,8 @@
 .connection-editor .provider-options { margin: 0 0 20px; padding: 14px; border: 1px solid var(--border); border-radius: 10px; }
 @media (max-width: 760px) { .tools-layout { grid-template-columns: 1fr; } .connection-hub-heading { flex-wrap: wrap; gap: 16px; } .connections-hub dialog.connection-editor { padding: 22px; border-radius: 0; } }
 .drawer-close { float: right; position: sticky; top: 0; z-index: 2; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--ink); font-size: 24px; cursor: pointer; }
+
+/* Repository action menus must extend beyond the panel's rounded boundary. */
+.connections-hub .panel.repo-catalog:has(.repository-actions) {
+  overflow: visible;
+}
