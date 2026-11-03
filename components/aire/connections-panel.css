@@ -143,3 +143,40 @@
 .repository-health-help { font-size: .8rem; }
 .provider-repository .connection-toolbar { flex-shrink: 0; flex-wrap: wrap; }
 @media (max-width: 900px) { .provider-repository { flex-wrap: wrap; gap: 1rem; } }
+
+/* Compact tools, focused repository actions and progressive configuration. */
+.connections-hub { gap: 24px; }
+.connections-hub .connected-tools h2 { margin-bottom: 4px; }
+.connections-hub .connected-tools p { margin-top: 0; color: var(--text); }
+.tools-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.tools-layout section:not(:has(article)) { display: none; }
+.connections-hub .tools-category { font-size: 12px; text-transform: uppercase; letter-spacing: .09em; color: var(--text); margin: 0 0 12px; }
+.connections-hub .connection-catalog-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.connections-hub .integration-card { padding: 20px; border-radius: 14px; }
+.connections-hub .provider-card-heading { display: flex; flex-wrap: wrap; gap: 12px; }
+.connections-hub .provider-card-heading h3 { font-size: 17px; flex: 1; margin: 0; min-width: 80px; }
+.connections-hub .provider-logo { width: 40px; height: 40px; flex-basis: 40px; border-radius: 10px; }
+.connections-hub .integration-card > p { margin: 10px 0 16px; font-size: 13px; }
+.connections-hub .connection-status { font-size: 11px; margin-left: 0; }
+.connections-hub .provider-primary-actions .button { min-height: 34px; padding: 6px 12px; font-size: 12px; }
+.connection-empty { border: 1px dashed var(--border); border-radius: 16px; padding: 28px; text-align: center; }
+.future-catalog { border-top: 1px solid var(--border); padding-top: 18px; }
+.future-catalog h2 { font-size: 14px; }
+.future-catalog > div { display: flex; flex-wrap: wrap; gap: 24px; margin: 14px 0; }
+.future-catalog span { display: inline-flex; align-items: center; gap: 10px; color: var(--text); }
+.environment-summary { border-top: 1px solid var(--border); padding: 20px 0; }
+.environment-summary > summary { font-weight: 600; }
+.environment-summary > summary span { margin-left: 16px; font-size: 12px; font-weight: 400; color: var(--text); }
+.repository-actions { position: relative; }
+.repository-actions > summary { list-style: none; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; }
+.repository-actions > summary::-webkit-details-marker { display: none; }
+.repository-actions > div { position: absolute; right: 0; top: calc(100% + 6px); z-index: 10; min-width: 190px; padding: 6px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 10px 30px #0002; }
+.repository-actions button { display: block; width: 100%; padding: 10px; border: 0; border-radius: 6px; text-align: left; background: transparent; color: var(--ink); cursor: pointer; }
+.repository-actions button:hover { background: var(--border); }
+.connections-hub dialog.connection-editor { position: fixed; inset: 0 0 0 auto; margin: 0; height: 100dvh; max-height: 100dvh; width: min(560px, 100vw); max-width: 100vw; border-radius: 20px 0 0 20px; padding: 32px; border: 1px solid var(--border); overflow-y: auto; box-shadow: -20px 0 80px #0003; }
+.connections-hub dialog.connection-editor::backdrop { background: #07122480; backdrop-filter: blur(3px); }
+.drawer-title { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+.drawer-title h2, .drawer-title p { margin: 0; }
+.connection-editor .provider-options { margin: 0 0 20px; padding: 14px; border: 1px solid var(--border); border-radius: 10px; }
+@media (max-width: 760px) { .tools-layout { grid-template-columns: 1fr; } .connection-hub-heading { flex-wrap: wrap; gap: 16px; } .connections-hub dialog.connection-editor { padding: 22px; border-radius: 0; } }
+.drawer-close { float: right; position: sticky; top: 0; z-index: 2; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--border); background: var(--surface); color: var(--ink); font-size: 24px; cursor: pointer; }

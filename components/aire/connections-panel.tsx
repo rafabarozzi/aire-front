@@ -159,6 +159,7 @@ function ConnectionDialog({
         if (!busy) onClose();
       }}
     >
+      <button type="button" className="drawer-close" aria-label="Fechar painel" disabled={busy} onClick={onClose}>×</button>
       {children}
     </dialog>
   );
@@ -174,6 +175,7 @@ export function ConnectionsPanel({
   onMap: (r?: string) => void;
   canMap: boolean;
 }) {
+  const [showCatalog, setShowCatalog] = useState(false);
   const [health, setHealth] = useState<Record<string, RepositoryHealth>>({});
   const [validating, setValidating] = useState<Record<string, boolean>>({});
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
@@ -429,13 +431,15 @@ export function ConnectionsPanel({
           <h1>Conexões</h1>
           <p>As ferramentas da sua organização, em um só lugar.</p>
         </div>
+        <div className="connection-toolbar">
+        {manage && <button className="button primary" onClick={() => setShowCatalog(v => !v)} aria-expanded={showCatalog}>＋ Adicionar integração</button>}
         <button
           className="button secondary"
           disabled={busy || demo}
           onClick={() => run(refresh)}
         >
           <RefreshCw size={18} /> Atualizar
-        </button>
+        </button></div>
       </header>
       {demo && (
         <p className="notice">
@@ -452,17 +456,17 @@ export function ConnectionsPanel({
           {notice}
         </p>
       )}
+      <section className="connected-tools">
+        <div className="connection-section-title"><div><h2>Suas ferramentas</h2><p>Conecte as fontes que dão contexto às suas jornadas.</p></div></div>
+        {!connections.some(c => c.configured) && !data?.githubConfigured && <div className="connection-empty"><KeyRound size={24}/><h3>Comece conectando seu código</h3><p>Adicione GitHub ou GitLab, selecione os repositórios e mapeie sua primeira jornada.</p>{manage && <button className="button primary" onClick={() => setShowCatalog(true)}>Escolher integração</button>}</div>}
+      </section>
+      <div className={showCatalog ? "tools-layout catalog-visible" : "tools-layout"}>
       {(["code", "observability"] as const).map((category) => (
         <section
           key={category}
           aria-label={category === "code" ? "Código-fonte" : "Observabilidade"}
         >
-          <h2>{category === "code" ? "Código-fonte" : "Observabilidade"}</h2>
-          <p>
-            {category === "code"
-              ? "GitHub e GitLab podem ser usados simultaneamente."
-              : "Conecte sua telemetria para avaliar a prontidão das jornadas."}
-          </p>
+          <h2 className="tools-category">{category === "code" ? "Código-fonte" : "Observabilidade"}</h2>
           <div className="connection-catalog-grid">
             {(category === "code"
               ? ["github", "gitlab"]
@@ -473,6 +477,7 @@ export function ConnectionsPanel({
                 configured = c?.revision
                   ? c.configured
                   : p === "github" && data?.githubConfigured;
+              if (!showCatalog && !configured) return null;
               return (
                 <article
                   className="panel provider-card integration-card"
@@ -510,7 +515,7 @@ export function ConnectionsPanel({
                         onClick={() => open(p)}
                       >
                         <KeyRound size={16} />
-                        {configured ? "Editar credencial" : "Configurar"}
+                        {configured ? "Gerenciar" : "Conectar"}
                       </button>
                       {category === "code" && configured && (
                         <button
@@ -525,50 +530,15 @@ export function ConnectionsPanel({
                       )}
                     </div>
                   )}
-                  <details className="provider-options">
-                    <summary>
-                      Orientações
-                      {manage && configured ? " e opções" : " de conexão"}
-                    </summary>
-                    <div className="provider-guide">{guides[p]}</div>
-                    {category === "observability" && (
-                      <p>
-                        Salvar ou testar não inicia coleta nem cria monitores.
-                      </p>
-                    )}
-                    {manage && configured && (
-                      <div className="connection-toolbar">
-                        <button
-                          className="button secondary"
-                          disabled={busy || c?.needsReplacement}
-                          onClick={() =>
-                            run(async () => {
-                              const r = await request<{ message: string }>(
-                                "connections/integrations/" + p + "/test",
-                                { method: "POST", body: "{}" },
-                              );
-                              setNotice(r.message);
-                            })
-                          }
-                        >
-                          Testar conexão
-                        </button>
-                        <button
-                          className="button secondary"
-                          disabled={busy}
-                          onClick={() => setRemove({ provider: p })}
-                        >
-                          Remover conexão
-                        </button>
-                      </div>
-                    )}
-                  </details>
+
                 </article>
               );
             })}
           </div>
         </section>
       ))}
+      </div>
+      {showCatalog && <section className="future-catalog"><h2>Em breve</h2><div><span><Ticket size={18}/> ServiceNow · Jira</span><span><MessagesSquare size={18}/> Teams · Slack</span></div><button className="button secondary" onClick={() => setShowCatalog(false)}>Fechar catálogo</button></section>}
       {manage && (
         <details
           className="panel repo-catalog repository-discovery"
@@ -681,48 +651,17 @@ export function ConnectionsPanel({
                 </div>
               </div>
               <div className="connection-toolbar">
-                {manage && (
-                  <button
-                    className="button secondary"
-                    disabled={busy || validating[r]}
-                    onClick={() => void validateNow(r)}
-                  >
-                    {validating[r] ? "Validando…" : "Validar"}
-                  </button>
-                )}
-                {manage && (
-                  <button
-                    className="button secondary"
-                    disabled={busy}
-                    onClick={() => setEditRepo({ previous: r, value: r })}
-                  >
-                    Editar
-                  </button>
-                )}
-                {canMap && (
-                  <button
-                    className="button secondary"
-                    disabled={busy || demo}
-                    onClick={() => onMap(r)}
-                  >
-                    Mapear jornada
-                  </button>
-                )}
-                {manage && (
-                  <button
-                    className="button secondary"
-                    disabled={busy}
-                    onClick={() => setRemove({ repository: r })}
-                  >
-                    Remover
-                  </button>
-                )}
+                {canMap && <button className="button primary" disabled={busy || demo} onClick={() => onMap(r)}>Mapear jornada →</button>}
+                {manage && <details className="repository-actions"><summary aria-label={"Opções de " + r}>•••</summary><div>
+                  <button disabled={busy || validating[r]} onClick={e => {e.currentTarget.closest("details")?.removeAttribute("open"); void validateNow(r);}}>Validar acesso</button>
+                  <button disabled={busy} onClick={() => setEditRepo({previous:r,value:r})}>Editar repositório</button>
+                  <button disabled={busy} onClick={() => setRemove({repository:r})}>Remover</button>
+                </div></details>}
               </div>
             </div>
           ))}
       </section>
-      <section aria-label="Identidade, ambiente e próximas integrações">
-        <h2>Identidade e ambiente</h2>
+      <details className="environment-summary"><summary>Identidade e ambiente <span>SSO · Motor AIRE</span></summary>
         <div className="connection-status-list">
           <div className="connection-status-row">
             <ShieldCheck />
@@ -746,19 +685,7 @@ export function ConnectionsPanel({
             </span>
           </div>
         </div>
-        <div className="connection-future">
-          <div>
-            <Ticket />
-            <span>ServiceNow · Jira</span>
-            <span className="badge">Em breve</span>
-          </div>
-          <div>
-            <MessagesSquare />
-            <span>Teams · Slack</span>
-            <span className="badge">Em breve</span>
-          </div>
-        </div>
-      </section>
+      </details>
       {editRepo && (
         <ConnectionDialog
           title="Editar repositório"
@@ -832,7 +759,13 @@ export function ConnectionsPanel({
               run(save);
             }}
           >
-            <h2>Configurar {names[editing]}</h2>
+            <div className="drawer-title"><ProviderLogo provider={editing}/><div><p className="eyebrow">INTEGRAÇÃO</p><h2>{names[editing]}</h2></div></div>
+            <details className="provider-options"><summary>Como conectar {names[editing]}</summary><div className="provider-guide">{guides[editing]}</div></details>
+            {connections.find(c => c.provider === editing)?.configured && <div className="connection-toolbar">
+              <button type="button" className="button secondary" disabled={busy} onClick={() => run(async () => { const result = await request<{message: string}>("connections/integrations/" + editing + "/test", {method:"POST",body:"{}"}); setNotice(result.message); })}>Testar conexão</button>
+              <button type="button" className="button secondary" disabled={busy} onClick={() => {setRemove({provider: editing}); setEditing(null); setFields({});}}>Remover conexão</button>
+            </div>}
+            {notice && <p role="status" className="notice">{notice}</p>}
             <p>
               Os segredos são protegidos por organização e não serão exibidos
               novamente. Ao substituir, informe a credencial completa.
