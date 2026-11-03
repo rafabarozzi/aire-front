@@ -1,0 +1,135 @@
+/* Scoped catalog polish; authentication and connection state are unchanged. */
+.connections-hub {
+  gap: 36px;
+}
+.connections-hub .connection-catalog-grid {
+  align-items: start;
+  gap: 16px;
+}
+.connections-hub .integration-card {
+  padding: 24px;
+  border-radius: 16px;
+  box-shadow: none;
+}
+.connections-hub .provider-card-heading {
+  gap: 14px;
+}
+.connections-hub .provider-card-heading h3 {
+  min-width: 100px;
+}
+.connections-hub .provider-logo {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.connections-hub .provider-logo svg {
+  width: 27px;
+  height: 27px;
+}
+.provider-logo--github {
+  color: var(--ink);
+}
+.provider-logo--gitlab {
+  color: #e77432;
+}
+.provider-logo--datadog {
+  color: #a37be0;
+}
+.provider-logo--dynatrace {
+  color: #65b83d;
+}
+.connections-hub .connection-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 4px 9px;
+  width: auto;
+  height: auto;
+  flex: 0 1 auto;
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+.connections-hub .connection-status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: 0 0 6px;
+}
+.connections-hub .connection-status.is-saved::before {
+  background: #34b58c;
+}
+.connections-hub .connection-status.needs-attention::before {
+  background: #e4a83d;
+}
+.connections-hub .integration-card > p {
+  margin: 16px 0 20px;
+  font-size: 15px;
+}
+.connections-hub .provider-primary-actions {
+  margin-top: 0;
+}
+.connections-hub .provider-primary-actions .button {
+  min-height: 42px;
+  padding: 9px 14px;
+  font-size: 14px;
+}
+.connections-hub .provider-options {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  margin: 20px 0 0;
+  font-size: 14px;
+}
+.connections-hub .provider-options summary {
+  color: var(--text);
+}
+.connections-hub .provider-guide {
+  margin-top: 16px;
+}
+.connections-hub summary {
+  cursor: pointer;
+}
+.connections-hub summary:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 5px;
+  border-radius: 4px;
+}
+.connections-hub .repository-discovery > summary {
+  color: var(--ink);
+  font-weight: 650;
+  font-size: 18px;
+}
+.connections-hub .repository-discovery[open] > summary {
+  margin-bottom: 18px;
+}
+.connections-hub .provider-card h3 > svg {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  vertical-align: -3px;
+}
+@media (max-width: 520px) {
+  .connections-hub .integration-card {
+    padding: 20px;
+  }
+  .connections-hub .provider-card-heading {
+    gap: 12px;
+  }
+  .connections-hub .connection-status {
+    margin-left: 60px;
+  }
+  .connections-hub .provider-primary-actions .button {
+    flex: 1 1 auto;
+  }
+}
