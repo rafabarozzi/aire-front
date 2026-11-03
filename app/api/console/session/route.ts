@@ -1,12 +1,14 @@
 import { demoSession } from "@/lib/aire/demo";
 import { isDemo, AppError } from "@/lib/server/config";
-import { sessionResponse } from "@/lib/server/session";
+import { sessionResponse, renewSession } from "@/lib/server/session";
 export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   try {
-    return Response.json(
-      isDemo() ? demoSession : await sessionResponse(request),
-      { headers: { "Cache-Control": "no-store" } },
+    return await renewSession(
+      request,
+      Response.json(isDemo() ? demoSession : await sessionResponse(request), {
+        headers: { "Cache-Control": "no-store" },
+      }),
     );
   } catch (e) {
     return Response.json(

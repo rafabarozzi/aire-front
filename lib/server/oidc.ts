@@ -16,6 +16,7 @@ import {
   cookie,
   FLOW_COOKIE,
   SESSION_COOKIE,
+  createSessionCookie,
   ONBOARDING_COOKIE,
 } from "./session.ts";
 
@@ -245,14 +246,7 @@ export async function auth(request: Request, provider: "google" | "microsoft") {
       Location: origin,
       "Cache-Control": "no-store",
     });
-    headers.append(
-      "Set-Cookie",
-      cookie(
-        SESSION_COOKIE,
-        await seal({ identity, origin }, "session", 1800),
-        1800,
-      ),
-    );
+    headers.append("Set-Cookie", await createSessionCookie(identity, origin));
     headers.append("Set-Cookie", cookie(FLOW_COOKIE, "", 0));
     headers.append("Set-Cookie", cookie(ONBOARDING_COOKIE, "", 0));
     return new Response(null, { status: 302, headers });
