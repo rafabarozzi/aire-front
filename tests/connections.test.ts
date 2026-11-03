@@ -235,6 +235,7 @@ test("non-managers cannot mutate connections and CSRF is rejected before storage
   limited[0].members[0].role = "engineer";
   process.env.AIRE_TENANTS_JSON = JSON.stringify(limited);
   for (const [path, method, body] of [
+    ["connections/repository-health", "POST", { repository: "org/seed", force: true }],
     [
       "connections/github",
       "PUT",
@@ -331,4 +332,59 @@ test("old RBAC policies gain connection management only for administrators", asy
   assert.ok(migrated.admin.includes("connections:manage"));
   assert.ok(!migrated.engineer.includes("connections:manage"));
   assert.ok(!migrated.viewer.includes("connections:manage"));
+});
+
+test("repository health caches provider checks, forces refresh and isolates tenants", async () => {
+  let calls = 0;
+  globalThis.fetch = async (input) => {
+    calls++;
+    return Response.json(String(input).includes("/commits/")
+      ? { sha: "a".repeat(40) } : { default_branch: "main", private: true });
+  };
+  const check = (force = false, subject = "alice") => call("connections/repository-health", "POST", { repository: "org/seed", force }, subject);
+  const first = await check();
+  assert.equal(first.status, 200);
+  assert.equal(((await first.json()) as { status: string }).status, "ready");
+  assert.equal(calls, 2);
+  await check();
+  assert.equal(calls, 2);
+  await check(true);
+  assert.equal(calls, 4);
+  const bob = await call("connections/repository-health", "GET", undefined, "bob");
+  assert.equal(((await bob.json()) as { status: string }[])[0].status, "unknown");
+  const forbidden = await call("connections/repository-health", "POST", { repository: "org/other" });
+  assert.equal(forbidden.status, 403);
+  assert.equal(calls, 4);
+  // Legacy environment credential changes invalidate a previously successful check.
+  process.env.TEST_GITHUB_FALLBACK = "changed-synthetic-credential";
+  const changed = await call("connections/repository-health");
+  assert.equal(((await changed.json()) as { status: string }[])[0].status, "unknown");
+  globalThis.fetch = async () => { throw new Error("SECRET_MUST_NOT_LEAK"); };
+  const failed = await check(true);
+  const result = await failed.json() as { status: string };
+  assert.equal(result.status, "failed");
+  assert.equal(JSON.stringify(result).includes("SECRET_MUST_NOT_LEAK"), false);
+});
+
+test("repository health expires and deduplicates simultaneous validation", async () => {
+  const { createHash } = await import("node:crypto");
+  globalThis.fetch = async (input) => Response.json(String(input).includes("/commits/")
+    ? { sha: "b".repeat(40) } : { default_branch: "main", private: false });
+  await call("connections/repository-health", "POST", { repository: "org/seed" });
+  const { tenantDirectory } = await import("../lib/server/store.ts");
+  const path = join(tenantDirectory("alpha"), "repository-health", createHash("sha256").update("org/seed").digest("hex") + ".json");
+  const saved = JSON.parse(await readFile(path, "utf8"));
+  saved.expiresAt = new Date(0).toISOString();
+  await writeFile(path, JSON.stringify(saved));
+  assert.equal(((await (await call("connections/repository-health")).json()) as { stale: boolean }[])[0].stale, true);
+  let calls = 0;
+  globalThis.fetch = async (input) => {
+    calls++;
+    await new Promise(resolve => setTimeout(resolve, 30));
+    return Response.json(String(input).includes("/commits/")
+      ? { sha: "c".repeat(40) } : { default_branch: "main", private: false });
+  };
+  const responses = await Promise.all([1,2].map(() => call("connections/repository-health", "POST", { repository: "org/seed", force: true })));
+  assert.equal(calls, 2);
+  for (const response of responses) assert.equal(((await response.json()) as { stale: boolean }).stale, false);
 });

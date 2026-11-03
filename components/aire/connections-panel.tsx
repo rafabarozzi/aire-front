@@ -11,8 +11,18 @@ import {
 } from "lucide-react";
 import { ProviderLogo } from "./provider-logo";
 import "./connections-panel.css";
+import { importedPem } from "@/lib/aire/pem";
 import { request } from "@/lib/aire/client";
 import type { ConnectionsView, Session } from "@/lib/aire/types";
+type RepositoryHealth = {
+  repository: string;
+  status: "unknown" | "ready" | "failed";
+  stale: boolean;
+  checkedAt?: string;
+  branch?: string;
+  revision?: string;
+  message?: string;
+};
 type Provider = "github" | "gitlab" | "datadog" | "dynatrace";
 type Connection = {
   provider: Provider;
@@ -149,6 +159,7 @@ function ConnectionDialog({
         if (!busy) onClose();
       }}
     >
+      <button type="button" className="drawer-close" aria-label="Fechar painel" disabled={busy} onClick={onClose}>×</button>
       {children}
     </dialog>
   );
@@ -164,6 +175,12 @@ export function ConnectionsPanel({
   onMap: (r?: string) => void;
   canMap: boolean;
 }) {
+  const [showCatalog, setShowCatalog] = useState(false);
+  const [health, setHealth] = useState<Record<string, RepositoryHealth>>({});
+  const [validating, setValidating] = useState<Record<string, boolean>>({});
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
+  const [pemNotice, setPemNotice] = useState("");
+  const inFlight = useRef(new Set<string>());
   const repositoryCatalog = useRef<HTMLDetailsElement>(null);
   const [data, setData] = useState<ConnectionsView | null>(null),
     [connections, setConnections] = useState<Connection[]>([]);
@@ -189,6 +206,78 @@ export function ConnectionsPanel({
     repository?: string;
   } | null>(null);
   const manage = !demo && session.permissions.includes("connections:manage");
+  async function validateNow(repository: string) {
+    if (inFlight.current.has(repository)) return;
+    inFlight.current.add(repository);
+    setValidating(v => ({ ...v, [repository]: true }));
+    setValidationErrors(v => ({ ...v, [repository]: "" }));
+    try {
+      const result = await request<RepositoryHealth>("connections/repository-health", {
+        method: "POST", body: JSON.stringify({ repository, force: true }),
+      });
+      setHealth(v => ({ ...v, [repository]: result }));
+    } catch {
+      setValidationErrors(v => ({ ...v, [repository]: "Validação indisponível. Tente novamente." }));
+      setHealth(v => ({ ...v, [repository]: { ...v[repository], repository, stale: true } }));
+    } finally {
+      inFlight.current.delete(repository);
+      setValidating(v => ({ ...v, [repository]: false }));
+    }
+  }
+  const healthVersion = JSON.stringify([data?.revision, data?.repositories, connections.map(c => [c.provider, c.revision])]);
+  useEffect(() => {
+    if (demo || !data) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout>;
+    async function cycle() {
+      try {
+        const results = await request<RepositoryHealth[]>("connections/repository-health");
+        if (!active) return;
+        setHealth(Object.fromEntries(results.map(r => [r.repository, r])));
+        for (const r of results) {
+          if (!active || document.visibilityState === "hidden") break;
+          if (!manage || !r.stale || inFlight.current.has(r.repository)) continue;
+          inFlight.current.add(r.repository);
+          setValidating(v => ({ ...v, [r.repository]: true }));
+          try {
+            const checked = await request<RepositoryHealth>("connections/repository-health", {
+              method: "POST", body: JSON.stringify({ repository: r.repository }),
+            });
+            if (active) {
+              setHealth(v => ({ ...v, [r.repository]: checked }));
+              setValidationErrors(v => ({ ...v, [r.repository]: "" }));
+            }
+          } catch {
+            if (active) setValidationErrors(v => ({ ...v, [r.repository]: "Validação indisponível. Tente novamente." }));
+          } finally {
+            inFlight.current.delete(r.repository);
+            if (active) setValidating(v => ({ ...v, [r.repository]: false }));
+          }
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      } catch {
+        if (active) setError("Não foi possível atualizar os estados dos repositórios.");
+      } finally {
+        if (active) timer = setTimeout(cycle, 60_000);
+      }
+    }
+    void cycle();
+    return () => { active = false; clearTimeout(timer); };
+    // The serialized version changes only when repository or credential configuration changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [demo, manage, healthVersion]);
+  async function importPem(file?: File) {
+    setPemNotice("");
+    if (!file) return;
+    try {
+      if (file.size > 8192) throw new Error();
+      const content = importedPem(file.name, await file.text());
+      setFields(v => ({ ...v, privateKey: content }));
+      setPemNotice("Arquivo PEM importado. Salve para aplicar a credencial.");
+    } catch {
+      setPemNotice("Importação falhou. Selecione uma chave privada .pem válida de até 8 KB.");
+    }
+  }
   async function refresh() {
     const [d, c] = await Promise.all([
       request<ConnectionsView>("connections"),
@@ -240,6 +329,7 @@ export function ConnectionsPanel({
       appId: c?.appId || "",
       installationId: c?.installationId || "",
     });
+    setPemNotice("");
     setEditing(p);
     setError("");
   }
@@ -341,13 +431,15 @@ export function ConnectionsPanel({
           <h1>Conexões</h1>
           <p>As ferramentas da sua organização, em um só lugar.</p>
         </div>
+        <div className="connection-toolbar">
+        {manage && <button className="button primary" onClick={() => setShowCatalog(v => !v)} aria-expanded={showCatalog}>＋ Adicionar integração</button>}
         <button
           className="button secondary"
           disabled={busy || demo}
           onClick={() => run(refresh)}
         >
           <RefreshCw size={18} /> Atualizar
-        </button>
+        </button></div>
       </header>
       {demo && (
         <p className="notice">
@@ -364,17 +456,17 @@ export function ConnectionsPanel({
           {notice}
         </p>
       )}
+      <section className="connected-tools">
+        <div className="connection-section-title"><div><h2>Suas ferramentas</h2><p>Conecte as fontes que dão contexto às suas jornadas.</p></div></div>
+        {!connections.some(c => c.configured) && !data?.githubConfigured && <div className="connection-empty"><KeyRound size={24}/><h3>Comece conectando seu código</h3><p>Adicione GitHub ou GitLab, selecione os repositórios e mapeie sua primeira jornada.</p>{manage && <button className="button primary" onClick={() => setShowCatalog(true)}>Escolher integração</button>}</div>}
+      </section>
+      <div className={showCatalog ? "tools-layout catalog-visible" : "tools-layout"}>
       {(["code", "observability"] as const).map((category) => (
         <section
           key={category}
           aria-label={category === "code" ? "Código-fonte" : "Observabilidade"}
         >
-          <h2>{category === "code" ? "Código-fonte" : "Observabilidade"}</h2>
-          <p>
-            {category === "code"
-              ? "GitHub e GitLab podem ser usados simultaneamente."
-              : "Conecte sua telemetria para avaliar a prontidão das jornadas."}
-          </p>
+          <h2 className="tools-category">{category === "code" ? "Código-fonte" : "Observabilidade"}</h2>
           <div className="connection-catalog-grid">
             {(category === "code"
               ? ["github", "gitlab"]
@@ -385,6 +477,7 @@ export function ConnectionsPanel({
                 configured = c?.revision
                   ? c.configured
                   : p === "github" && data?.githubConfigured;
+              if (!showCatalog && !configured) return null;
               return (
                 <article
                   className="panel provider-card integration-card"
@@ -422,7 +515,7 @@ export function ConnectionsPanel({
                         onClick={() => open(p)}
                       >
                         <KeyRound size={16} />
-                        {configured ? "Editar credencial" : "Configurar"}
+                        {configured ? "Gerenciar" : "Conectar"}
                       </button>
                       {category === "code" && configured && (
                         <button
@@ -437,50 +530,15 @@ export function ConnectionsPanel({
                       )}
                     </div>
                   )}
-                  <details className="provider-options">
-                    <summary>
-                      Orientações
-                      {manage && configured ? " e opções" : " de conexão"}
-                    </summary>
-                    <div className="provider-guide">{guides[p]}</div>
-                    {category === "observability" && (
-                      <p>
-                        Salvar ou testar não inicia coleta nem cria monitores.
-                      </p>
-                    )}
-                    {manage && configured && (
-                      <div className="connection-toolbar">
-                        <button
-                          className="button secondary"
-                          disabled={busy || c?.needsReplacement}
-                          onClick={() =>
-                            run(async () => {
-                              const r = await request<{ message: string }>(
-                                "connections/integrations/" + p + "/test",
-                                { method: "POST", body: "{}" },
-                              );
-                              setNotice(r.message);
-                            })
-                          }
-                        >
-                          Testar conexão
-                        </button>
-                        <button
-                          className="button secondary"
-                          disabled={busy}
-                          onClick={() => setRemove({ provider: p })}
-                        >
-                          Remover conexão
-                        </button>
-                      </div>
-                    )}
-                  </details>
+
                 </article>
               );
             })}
           </div>
         </section>
       ))}
+      </div>
+      {showCatalog && <section className="future-catalog"><h2>Em breve</h2><div><span><Ticket size={18}/> ServiceNow · Jira</span><span><MessagesSquare size={18}/> Teams · Slack</span></div><button className="button secondary" onClick={() => setShowCatalog(false)}>Fechar catálogo</button></section>}
       {manage && (
         <details
           className="panel repo-catalog repository-discovery"
@@ -570,6 +628,7 @@ export function ConnectionsPanel({
             onChange={(e) => setRegisteredSearch(e.target.value)}
           />
         </label>
+        <p className="repository-health-help">Acesso e revisão verificados a cada 15 minutos enquanto esta página estiver aberta por um administrador. Use Validar para checar agora.</p>
         {!data?.repositories.length && (
           <p>Adicione seu primeiro repositório para começar.</p>
         )}
@@ -579,63 +638,30 @@ export function ConnectionsPanel({
           )
           .map((r) => (
             <div className="provider-repository" key={r}>
-              <span>
-                <b>
-                  {r.startsWith("https://gitlab.com/") ? "GitLab" : "GitHub"}
-                </b>{" "}
-                · {r}
-              </span>
+              <div className="repository-identity">
+                <span><b>{r.startsWith("https://gitlab.com/") ? "GitLab" : "GitHub"}</b> · {r}</span>
+                <div className="repository-health" role="status" aria-live="polite">
+                  <strong data-state={validating[r] ? "checking" : health[r]?.stale ? "unknown" : health[r]?.status || "unknown"}>
+                    {validating[r] ? "Validando…" : health[r]?.stale && health[r]?.checkedAt ? "Revalidar acesso" : health[r]?.status === "ready" ? "Pronto para mapear" : health[r]?.status === "failed" ? "Falha na validação" : "Ainda não validado"}
+                  </strong>
+                  {health[r]?.checkedAt && <small>Última checagem: {new Date(health[r].checkedAt!).toLocaleString("pt-BR")}</small>}
+                  {health[r]?.status === "ready" && <small>{health[r].branch} · {health[r].revision?.slice(0, 8)}</small>}
+                  {health[r]?.status === "failed" && <small>{health[r].message}</small>}
+                  {validationErrors[r] && <small role="alert">{validationErrors[r]}</small>}
+                </div>
+              </div>
               <div className="connection-toolbar">
-                {manage && (
-                  <button
-                    className="button secondary"
-                    disabled={busy}
-                    onClick={() =>
-                      run(async () => {
-                        await request("repositories/validate", {
-                          method: "POST",
-                          body: JSON.stringify({ repository: r }),
-                        });
-                        setNotice("Repositório e revisão validados: " + r);
-                      })
-                    }
-                  >
-                    Validar
-                  </button>
-                )}
-                {manage && (
-                  <button
-                    className="button secondary"
-                    disabled={busy}
-                    onClick={() => setEditRepo({ previous: r, value: r })}
-                  >
-                    Editar
-                  </button>
-                )}
-                {canMap && (
-                  <button
-                    className="button secondary"
-                    disabled={busy || demo}
-                    onClick={() => onMap(r)}
-                  >
-                    Mapear jornada
-                  </button>
-                )}
-                {manage && (
-                  <button
-                    className="button secondary"
-                    disabled={busy}
-                    onClick={() => setRemove({ repository: r })}
-                  >
-                    Remover
-                  </button>
-                )}
+                {canMap && <button className="button primary" disabled={busy || demo} onClick={() => onMap(r)}>Mapear jornada →</button>}
+                {manage && <details className="repository-actions"><summary aria-label={"Opções de " + r}>•••</summary><div>
+                  <button disabled={busy || validating[r]} onClick={e => {e.currentTarget.closest("details")?.removeAttribute("open"); void validateNow(r);}}>Validar acesso</button>
+                  <button disabled={busy} onClick={() => setEditRepo({previous:r,value:r})}>Editar repositório</button>
+                  <button disabled={busy} onClick={() => setRemove({repository:r})}>Remover</button>
+                </div></details>}
               </div>
             </div>
           ))}
       </section>
-      <section aria-label="Identidade, ambiente e próximas integrações">
-        <h2>Identidade e ambiente</h2>
+      <details className="environment-summary"><summary>Identidade e ambiente <span>SSO · Motor AIRE</span></summary>
         <div className="connection-status-list">
           <div className="connection-status-row">
             <ShieldCheck />
@@ -659,19 +685,7 @@ export function ConnectionsPanel({
             </span>
           </div>
         </div>
-        <div className="connection-future">
-          <div>
-            <Ticket />
-            <span>ServiceNow · Jira</span>
-            <span className="badge">Em breve</span>
-          </div>
-          <div>
-            <MessagesSquare />
-            <span>Teams · Slack</span>
-            <span className="badge">Em breve</span>
-          </div>
-        </div>
-      </section>
+      </details>
       {editRepo && (
         <ConnectionDialog
           title="Editar repositório"
@@ -745,7 +759,13 @@ export function ConnectionsPanel({
               run(save);
             }}
           >
-            <h2>Configurar {names[editing]}</h2>
+            <div className="drawer-title"><ProviderLogo provider={editing}/><div><p className="eyebrow">INTEGRAÇÃO</p><h2>{names[editing]}</h2></div></div>
+            <details className="provider-options"><summary>Como conectar {names[editing]}</summary><div className="provider-guide">{guides[editing]}</div></details>
+            {connections.find(c => c.provider === editing)?.configured && <div className="connection-toolbar">
+              <button type="button" className="button secondary" disabled={busy} onClick={() => run(async () => { const result = await request<{message: string}>("connections/integrations/" + editing + "/test", {method:"POST",body:"{}"}); setNotice(result.message); })}>Testar conexão</button>
+              <button type="button" className="button secondary" disabled={busy} onClick={() => {setRemove({provider: editing}); setEditing(null); setFields({});}}>Remover conexão</button>
+            </div>}
+            {notice && <p role="status" className="notice">{notice}</p>}
             <p>
               Os segredos são protegidos por organização e não serão exibidos
               novamente. Ao substituir, informe a credencial completa.
@@ -773,12 +793,21 @@ export function ConnectionsPanel({
               <>
                 {field("appId", "App ID ou Client ID")}
                 {field("installationId", "Installation ID")}
+                <label className="field">Ou importe o arquivo .pem
+                  <input type="file" accept=".pem" disabled={busy} onChange={e => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    void importPem(file);
+                  }} />
+                </label>
+                {pemNotice && <p role="status">{pemNotice}</p>}
                 <label className="field">
-                  Chave privada PEM
+                  Cole o conteúdo da chave privada PEM
                   <textarea
                     required
                     autoComplete="off"
                     spellCheck={false}
+                    placeholder="-----BEGIN RSA PRIVATE KEY-----"
                     value={fields.privateKey || ""}
                     onChange={(e) =>
                       setFields({ ...fields, privateKey: e.target.value })
