@@ -4,7 +4,6 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { request } from "@/lib/aire/client";
 import {
-  environmentSchema,
   isReadinessInProgress,
   resolvedWait,
   validateTags,
@@ -13,9 +12,18 @@ import {
   type ReadinessEvaluation,
   type ReadinessRecommendation,
 } from "@/lib/aire/observability";
+import {
+  emptyResponseSelection,
+  type CatalogRecord,
+  type ResponseSelection,
+} from "@/lib/aire/operational-catalog";
 import "./observability.css";
 type Settings = NonNullable<ReadinessRecommendation["monitor_settings"]>;
-type Preferences = { revision: number; tags: Record<string, string> };
+type Preferences = {
+  revision: number;
+  tags: Record<string, string>;
+  teamId?: string;
+};
 export function ReadinessPanel({ analysisId }: { analysisId: string }) {
   const base = `observability/journeys/${analysisId}`;
   const [permissions, setPermissions] = useState<string[]>([]),
@@ -28,14 +36,19 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState(""),
-    [mode, setMode] = useState<"simulation" | "real">("simulation"),
-    [environment, setEnvironment] = useState("lab"),
     [selected, setSelected] = useState<Record<string, boolean>>({}),
     [settings, setSettings] = useState<Record<string, Settings>>({}),
     [review, setReview] = useState(false),
     [approval, setApproval] = useState<{ token: string; ids: string[] }>(),
     [enableResponses, setEnableResponses] = useState(false),
     [report, setReport] = useState("");
+  const [catalog, setCatalog] = useState<CatalogRecord>();
+  const [teamId, setTeamId] = useState("");
+  const [newTeam, setNewTeam] = useState<string | null>(null);
+  const [responses, setResponses] = useState<Record<string, ResponseSelection>>(
+    {},
+  );
+  const [bulk, setBulk] = useState<ResponseSelection>(emptyResponseSelection());
   const refresh = useCallback(async () => {
     setHistory(await request<ReadinessEvaluation[]>(base + "/evaluations"));
   }, [base]);
@@ -46,21 +59,22 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
       request<Capabilities>("observability/capabilities"),
       request<PolicyRecord>("observability/policy"),
       request<Preferences>(base + "/preferences"),
+      request<CatalogRecord>("observability/catalog"),
     ])
-      .then(([s, c, p, pf]) => {
+      .then(([s, c, p, pf, cat]) => {
         if (!live) return;
         setPermissions(s.permissions);
         setCaps(c);
         setPolicy(p);
         setPrefs(pf);
+        setTeamId(pf.teamId || "");
+        setCatalog(cat);
         setTags({
           ...Object.fromEntries(
             p.policy.tags.definitions.map((t) => [t.key, t.defaultValue]),
           ),
           ...pf.tags,
         });
-        if (!c.modes.includes("simulation") && c.modes.includes("real"))
-          setMode("real");
       })
       .catch((e) => {
         if (live) setError(e.message);
@@ -76,7 +90,7 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
   }, [base, refresh]);
   const current = history.find((h) => h.id === active) || history[0];
   const running = history.some((h) => isReadinessInProgress(h.state));
-  const environmentValid = environmentSchema.safeParse(environment).success;
+
   useEffect(() => {
     if (!running) return;
     const timer = setInterval(() => void refresh().catch(() => {}), 10000);
@@ -111,11 +125,15 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
       setBusy(false);
     }
   }
-  async function saveTags() {
+  async function saveTags(values = mergedTags) {
     if (!prefs) return;
     const next = await request<Preferences>(base + "/preferences", {
       method: "PUT",
-      body: JSON.stringify({ revision: prefs.revision, tags: mergedTags }),
+      body: JSON.stringify({
+        revision: prefs.revision,
+        tags: values,
+        ...(teamId ? { teamId } : {}),
+      }),
     });
     setPrefs(next);
   }
@@ -156,73 +174,149 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
           por monitor.
         </p>
       )}
-      <div className="obs-toolbar">
-        <label>
-          Modo
-          <select
-            value={mode}
-            onChange={(e) => setMode(e.target.value as typeof mode)}
-            disabled={!contractReady || busy}
-          >
-            <option
-              value="simulation"
-              disabled={!caps?.modes.includes("simulation")}
+      {policy && (
+        <div className="obs-grid">
+          {[
+            policy.policy.tags.journeyKey,
+            ...policy.policy.tags.definitions.map((t) => t.key),
+          ].map((k) => (
+            <label key={k}>
+              {k}
+              {k === policy.policy.tags.journeyKey ||
+              policy.policy.tags.definitions.some(
+                (t) => t.key === k && t.required,
+              )
+                ? " · obrigatória"
+                : ""}
+              <input
+                value={tags[k] || ""}
+                disabled={busy}
+                onChange={(e) => {
+                  setTags({ ...tags, [k]: e.target.value });
+                  invalidate();
+                }}
+              />
+            </label>
+          ))}
+          <label>
+            Equipe responsável
+            <select
+              value={teamId}
+              disabled={busy}
+              onChange={(e) => {
+                setTeamId(e.target.value);
+                invalidate();
+              }}
             >
-              Simulação · sem alterações externas
-            </option>
-            <option value="real" disabled={!caps?.modes.includes("real")}>
-              Ambiente real
-            </option>
-          </select>
-        </label>
-        <label>
-          Ambiente
-          <input
-            value={environment}
-            onChange={(e) => setEnvironment(e.target.value)}
-            maxLength={80}
-            pattern="[a-zA-Z0-9_.\-]{1,80}"
-            required
-            aria-invalid={!environmentValid}
-            aria-describedby="readiness-environment-help"
-          />
-        </label>
-        <small id="readiness-environment-help">
-          Use letras, números, ponto, hífen ou sublinhado, sem espaços. Exemplo:
-          prod-br.
-        </small>
+              <option value="">Selecione uma equipe</option>
+              {catalog?.catalog.teams.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {permissions.includes("readiness:configure") && (
+            <button className="button secondary" onClick={() => setNewTeam("")}>
+              Cadastrar equipe
+            </button>
+          )}
+          {newTeam !== null && (
+            <div>
+              <label>
+                Nome da nova equipe
+                <input
+                  value={newTeam}
+                  onChange={(e) => setNewTeam(e.target.value)}
+                />
+              </label>
+              <button
+                className="button secondary"
+                disabled={busy || !newTeam.trim()}
+                onClick={() =>
+                  perform(async () => {
+                    if (!catalog) return;
+                    const team = {
+                      id: crypto.randomUUID(),
+                      name: newTeam.trim(),
+                    };
+                    const result = await request<CatalogRecord>(
+                      "observability/catalog",
+                      {
+                        method: "PUT",
+                        body: JSON.stringify({
+                          revision: catalog.revision,
+                          catalog: {
+                            ...catalog.catalog,
+                            teams: [...catalog.catalog.teams, team],
+                          },
+                        }),
+                      },
+                    );
+                    setCatalog(result);
+                    setTeamId(team.id);
+                    setNewTeam(null);
+                  })
+                }
+              >
+                Salvar equipe
+              </button>
+              <button
+                className="button secondary"
+                onClick={() => setNewTeam(null)}
+              >
+                Cancelar
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      {contractReady && !caps?.modes.includes("real") && (
+        <p className="obs-notice">
+          A conexão está cadastrada, mas a avaliação com telemetria real ainda
+          aguarda habilitação. As avaliações simuladas anteriores continuam
+          disponíveis no histórico.
+        </p>
+      )}
+      {caps?.modes.includes("real") && !caps.operationalCatalog && (
+        <p className="obs-notice">
+          Novas avaliações aguardam a integração dos cadastros operacionais ao
+          serviço de prontidão.
+        </p>
+      )}
+      <div className="obs-toolbar">
         <button
           className="button primary"
           disabled={
             busy ||
             !contractReady ||
             !permissions.includes("readiness:evaluate") ||
-            !environmentValid ||
-            !caps?.modes.includes(mode)
+            !caps?.modes.includes("real") ||
+            !caps?.operationalCatalog ||
+            !teamId
           }
           onClick={() =>
             perform(async () => {
+              if (!policy) return;
+              const missing = validateTags(tags, policy.policy);
+              if (missing.length)
+                throw Error("Preencha as tags: " + missing.join(", "));
+              await saveTags(tags);
               const result = await request<ReadinessEvaluation>(
                 base + "/evaluations",
-                { method: "POST", body: JSON.stringify({ mode, environment }) },
+                { method: "POST", body: "{}" },
               );
               setActive(result.id);
               setSelected({});
               setSettings({});
+              setResponses({});
               setReview(false);
               invalidate();
               await refresh();
             })
           }
         >
-          {history.length ? "Solicitar atualização" : "Iniciar avaliação"}
-        </button>
-        <button
-          className="button secondary"
-          disabled={busy}
-          onClick={() => perform(refresh)}
-        >
-          Atualizar status
+          {busy ? "Aguarde…" : "Iniciar avaliação"}
         </button>
       </div>
       {error && (
@@ -315,6 +409,41 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
               instrumentação.
             </p>
           </details>
+          {chosen.length > 1 && (
+            <details>
+              <summary>
+                Configurar os {chosen.length} monitores selecionados
+              </summary>
+              <MonitorResponseFields
+                value={bulk}
+                catalog={
+                  current.data.operational_context
+                    ? {
+                        revision: current.data.operational_context.revision,
+                        catalog: current.data.operational_context.catalog,
+                      }
+                    : catalog
+                }
+                disabled={busy}
+                onChange={setBulk}
+              />
+              <button
+                className="button secondary"
+                disabled={busy}
+                onClick={() => {
+                  setResponses({
+                    ...responses,
+                    ...Object.fromEntries(
+                      chosen.map((r) => [r.id, { ...bulk }]),
+                    ),
+                  });
+                  invalidate();
+                }}
+              >
+                Aplicar aos selecionados
+              </button>
+            </details>
+          )}
           {rows.map((r) => {
             const s = itemSettings(r);
             return (
@@ -348,6 +477,30 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
                 </p>
                 {selected[r.id] && effectivePolicy && (
                   <>
+                    <MonitorResponseFields
+                      value={responses[r.id] || emptyResponseSelection()}
+                      catalog={
+                        current.data.operational_context
+                          ? {
+                              revision:
+                                current.data.operational_context.revision,
+                              catalog: current.data.operational_context.catalog,
+                            }
+                          : catalog
+                      }
+                      disabled={busy}
+                      onChange={(value) => {
+                        setResponses({ ...responses, [r.id]: value });
+                        invalidate();
+                      }}
+                    />
+                    {!caps?.operationalCatalog && (
+                      <p className="muted">
+                        Estas opções poderão ser aprovadas após a atualização do
+                        serviço de prontidão. Nenhuma configuração será ignorada
+                        silenciosamente.
+                      </p>
+                    )}
                     <label className="obs-check">
                       <input
                         type="checkbox"
@@ -463,7 +616,7 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
           </button>
         </>
       )}
-      {effectivePolicy && prefs && (
+      {review && effectivePolicy && prefs && (
         <details open={review}>
           <summary>
             {review ? "Revisão antes da execução" : "Tags salvas desta jornada"}
@@ -485,7 +638,13 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
                       ?.defaultValue ??
                     ""
                   }
-                  disabled={busy || !permissions.includes("readiness:approve")}
+                  disabled={
+                    busy ||
+                    !permissions.some(
+                      (p) =>
+                        p === "readiness:approve" || p === "readiness:evaluate",
+                    )
+                  }
                   onChange={(e) => {
                     setTags({ ...tags, [k]: e.target.value });
                     invalidate();
@@ -493,21 +652,6 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
                 />
               </label>
             ))}
-            <button
-              className="button secondary"
-              disabled={busy || !permissions.includes("readiness:approve")}
-              onClick={() =>
-                perform(async () => {
-                  await saveTags();
-                  invalidate();
-                  setNotice(
-                    "Tags salvas para esta jornada. Nenhum monitor foi alterado.",
-                  );
-                })
-              }
-            >
-              Salvar tags da jornada
-            </button>
             {review && current && (
               <>
                 <h3>Resumo das alterações</h3>
@@ -552,6 +696,14 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
                                 ),
                               ),
                               monitor_settings: itemSettings(r),
+                              ...(responses[r.id] ||
+                              current.data.operational_context
+                                ? {
+                                    response_selection:
+                                      responses[r.id] ||
+                                      emptyResponseSelection(),
+                                  }
+                                : {}),
                             })),
                           }),
                         },
@@ -645,5 +797,81 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
         </article>
       )}
     </section>
+  );
+}
+
+function MonitorResponseFields({
+  value,
+  catalog,
+  disabled,
+  onChange,
+}: {
+  value: ResponseSelection;
+  catalog?: CatalogRecord;
+  disabled: boolean;
+  onChange: (value: ResponseSelection) => void;
+}) {
+  return (
+    <div className="obs-grid">
+      <label>
+        Origem da escala
+        <select
+          disabled={disabled}
+          value={value.onCallProvider}
+          onChange={(e) =>
+            onChange({
+              ...value,
+              onCallProvider: e.target.value as "datadog" | "external",
+            })
+          }
+        >
+          <option value="datadog">Datadog</option>
+          <option value="external">Outra escala</option>
+        </select>
+      </label>
+      {(
+        [
+          ["onCallReference", "Referência da escala / on-call"],
+          ["notificationTarget", "Destino de notificações"],
+          ["itsmTarget", "Destino ITSM"],
+        ] as const
+      ).map(([key, label]) => (
+        <label key={key}>
+          {label}
+          <input
+            disabled={disabled}
+            value={value[key]}
+            onChange={(e) => onChange({ ...value, [key]: e.target.value })}
+          />
+        </label>
+      ))}
+      {(
+        [
+          ["notificationWindowId", "Janela de notificações"],
+          ["warRoomWindowId", "Janela de abertura de War Room"],
+        ] as const
+      ).map(([key, label]) => (
+        <label key={key}>
+          {label}
+          <select
+            disabled={disabled}
+            value={value[key] || ""}
+            onChange={(e) =>
+              onChange({ ...value, [key]: e.target.value || null })
+            }
+          >
+            <option value="">24x7</option>
+            {catalog?.catalog.windows.map((w) => (
+              <option key={w.id} value={w.id}>
+                {w.name} · {w.start}–{w.end} · {w.timezone}
+              </option>
+            ))}
+          </select>
+        </label>
+      ))}
+      <small>
+        A janela de abertura de War Room não silencia as notificações.
+      </small>
+    </div>
   );
 }

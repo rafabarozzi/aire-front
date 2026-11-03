@@ -320,7 +320,8 @@ test("matrix must cover all combinations and response requirements are explicit"
   assert.equal(p.rules.length, 36);
   assert.equal(policySchema.safeParse(p).success, true);
   p.response.warRoomEnabled = true;
-  assert.equal(policySchema.safeParse(p).success, false);
+  // Bindings are selected during monitor approval, not organization setup.
+  assert.equal(policySchema.safeParse(p).success, true);
   p.response.team = "SRE";
   p.response.onCallReference = "schedule-id";
   p.response.roomTarget = "channel-id";
@@ -405,4 +406,180 @@ test("polling continues through investigation and queued execution but stops on 
     "AWAITING_APPROVAL",
   ])
     assert.equal(isReadinessInProgress(state), false);
+});
+
+test("catalog mutation requires configure permission and remains tenant-scoped", async () => {
+  const { emptyCatalog } = await import("../lib/aire/operational-catalog.ts");
+  const value = {
+    revision: 0,
+    catalog: {
+      ...emptyCatalog(),
+      teams: [{ id: evaluationId, name: "Commerce" }],
+    },
+  };
+  assert.equal((await call("observability/catalog", "PUT", value)).status, 200);
+  assert.equal((await call("observability/catalog", "PUT", value)).status, 409);
+  process.env.AIRE_TENANTS_JSON = JSON.stringify(
+    ts.map((t) =>
+      t.id === "alpha"
+        ? { ...t, members: [{ ...t.members[0], role: "engineer" }] }
+        : t,
+    ),
+  );
+  assert.equal(
+    (await call("observability/catalog", "PUT", { ...value, revision: 1 }))
+      .status,
+    403,
+  );
+  const other = await call("observability/catalog", "GET", undefined, "bob");
+  assert.equal(
+    ((await other.json()) as { catalog: { teams: unknown[] } }).catalog.teams
+      .length,
+    0,
+  );
+});
+test("automatic evaluation never falls back to simulation and has no upstream mutation", async () => {
+  await saveJourney("alpha", journey);
+  let posts = 0;
+  globalThis.fetch = async (_u, init) => {
+    if (init?.method === "POST") posts++;
+    return Response.json(capabilities);
+  };
+  const r = await call(`observability/journeys/${id}/evaluations`, "POST", {});
+  assert.equal(r.status, 409);
+  assert.equal(posts, 0);
+});
+test("automatic evaluation uses saved environment, team and current tag names", async () => {
+  const { emptyCatalog } = await import("../lib/aire/operational-catalog.ts");
+  const { saveOperationalCatalog } =
+    await import("../lib/server/observability-store.ts");
+  await saveJourney("alpha", journey);
+  await saveOperationalCatalog(
+    "alpha",
+    0,
+    {
+      ...emptyCatalog(),
+      evaluationEnvironment: "production",
+      teams: [{ id: evaluationId, name: "Commerce" }],
+    },
+    "alice",
+  );
+  const p = defaultObservabilityPolicy();
+  p.tags.journeyKey = "jornada";
+  await saveObservabilityPolicy("alpha", 0, p, "alice");
+  await saveJourneyPreferences(
+    "alpha",
+    journey,
+    0,
+    { jornada: "checkout" },
+    "alice",
+    evaluationId,
+  );
+  let sent: Record<string, unknown> = {};
+  globalThis.fetch = async (u, init) => {
+    if (String(u).endsWith("/capabilities"))
+      return Response.json({
+        ...capabilities,
+        modes: ["real"],
+        operationalCatalog: true,
+      });
+    sent = JSON.parse(String(init?.body));
+    return Response.json({ id: evaluationId });
+  };
+  assert.equal(
+    (await call(`observability/journeys/${id}/evaluations`, "POST", {})).status,
+    200,
+  );
+  assert.equal(sent.mode, "real");
+  assert.equal(sent.environment, "production");
+  assert.deepEqual(sent.journey_tags, { jornada: "checkout" });
+  assert.equal(
+    (sent.operational_context as { teamId: string }).teamId,
+    evaluationId,
+  );
+});
+
+test("approval resolves response from the evaluation snapshot, not later organization edits", async () => {
+  const { emptyCatalog, emptyResponseSelection } =
+    await import("../lib/aire/operational-catalog.ts");
+  const { saveOperationalCatalog } =
+    await import("../lib/server/observability-store.ts");
+  await saveJourney("alpha", journey);
+  const teamId = crypto.randomUUID(),
+    destinationId = crypto.randomUUID();
+  const snapshot = {
+    ...emptyCatalog(),
+    teams: [{ id: teamId, name: "Original team" }],
+    destinations: [
+      {
+        id: destinationId,
+        name: "Original room",
+        provider: "teams" as const,
+        kind: "room" as const,
+        reference: "original-room",
+      },
+    ],
+    defaultDestinationId: destinationId,
+  };
+  await saveOperationalCatalog("alpha", 0, emptyCatalog(), "alice");
+  const policy = defaultObservabilityPolicy();
+  policy.response.warRoomEnabled = true;
+  const evaluation = {
+    id: evaluationId,
+    analysis: id,
+    data: {
+      policy_context: { revision: 0, policy },
+      operational_context: { revision: 7, catalog: snapshot, teamId },
+      recommendations: [
+        { id: "rec", version: "v1", prerequisites: [], execution: null },
+      ],
+    },
+  };
+  let payload: {
+    selections?: {
+      response_context: {
+        catalogRevision: number;
+        team: { name: string };
+        destination: { reference: string };
+      };
+    }[];
+  } = {};
+  globalThis.fetch = async (u, init) => {
+    if (String(u).endsWith("/capabilities"))
+      return Response.json({ ...capabilities, operationalCatalog: true });
+    if (init?.method === "POST") {
+      payload = JSON.parse(String(init.body));
+      return Response.json({ approval_token: "token" });
+    }
+    return Response.json(evaluation);
+  };
+  const path = `observability/journeys/${id}/evaluations/${evaluationId}/accept`;
+  const selection = {
+    id: "rec",
+    version: "v1",
+    tags: { journey: "checkout" },
+    monitor_settings: { warRoomEnabled: true, waitSeconds: 60 },
+    response_selection: {
+      ...emptyResponseSelection(),
+      onCallReference: "schedule-original",
+    },
+  };
+  assert.equal(
+    (await call(path, "POST", { selections: [selection] })).status,
+    200,
+  );
+  assert.equal(payload.selections![0].response_context.catalogRevision, 7);
+  assert.equal(
+    payload.selections![0].response_context.team.name,
+    "Original team",
+  );
+  assert.equal(
+    payload.selections![0].response_context.destination.reference,
+    "original-room",
+  );
+  selection.response_selection.onCallReference = "";
+  assert.equal(
+    (await call(path, "POST", { selections: [selection] })).status,
+    422,
+  );
 });
