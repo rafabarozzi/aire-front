@@ -268,3 +268,22 @@ export type ReadinessRecommendation = {
   severity: unknown;
   monitor_settings?: z.infer<typeof monitorSettingsSchema>;
 };
+
+// Shared by the form and BFF: match the engine CreateV1 environment contract.
+export const environmentSchema = z
+  .string()
+  .regex(
+    /^[a-zA-Z0-9_.-]{1,80}$/,
+    "Use de 1 a 80 letras, números, pontos, hífens ou sublinhados, sem espaços.",
+  );
+export function isReadinessInProgress(state: string): boolean {
+  return [
+    "QUEUED",
+    "RUNNING",
+    "EXECUTING",
+    "DISCOVERING",
+    "EVALUATING",
+    "INVESTIGATING",
+    "EXECUTION_QUEUED",
+  ].includes(state);
+}

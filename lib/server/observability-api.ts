@@ -10,6 +10,7 @@ import {
   saveJourneyPreferences,
 } from "./observability-store.ts";
 import {
+  environmentSchema,
   tagKeySchema,
   policySchema,
   preferencesSchema,
@@ -65,6 +66,11 @@ export async function observabilityApi(
             ? "readiness:execute"
             : "readiness:evaluate";
   const c = await context(request, permission);
+  const headers = {
+    "Content-Type": "application/json",
+    "X-AIRE-Actor": c.identity.sub,
+    "X-AIRE-Permissions": c.permissions.join(","),
+  };
   if (path.length === 2 && path[1] === "policy") {
     if (method === "GET") return readObservabilityPolicy(c.tenant.id);
     if (method === "PUT") {
@@ -107,7 +113,9 @@ export async function observabilityApi(
         if (version.status !== "COMPLETED") continue;
         try {
           const found = await (
-            await engine(c.tenant, `/v1/readiness/analyses/${version.id}`)
+            await engine(c.tenant, `/v1/readiness/analyses/${version.id}`, {
+              headers,
+            })
           ).json();
           if (!Array.isArray(found)) throw Error("invalid history");
           evaluations.push(
@@ -151,11 +159,7 @@ export async function observabilityApi(
   }
   if (path[3] !== "evaluations" || path.length > 6)
     throw new AppError(404, "not_found", "Recurso não encontrado.");
-  const headers = {
-    "Content-Type": "application/json",
-    "X-AIRE-Actor": c.identity.sub,
-    "X-AIRE-Permissions": c.permissions.join(","),
-  };
+
   const evaluationId = path[4],
     action = path[5];
   if (evaluationId && !z.string().uuid().safeParse(evaluationId).success)
@@ -207,7 +211,7 @@ export async function observabilityApi(
       z
         .object({
           mode: z.enum(["simulation", "real"]),
-          environment: z.string().trim().min(1).max(80),
+          environment: environmentSchema,
         })
         .strict(),
       await body(),
@@ -224,7 +228,11 @@ export async function observabilityApi(
       ...b,
       contract_version: 1,
       requested_by_user: true,
-      policy_context: policy,
+      policy_context: {
+        revision: policy.revision,
+        updatedAt: policy.updatedAt,
+        policy: policy.policy,
+      },
       journey_tags: prefs.tags,
     };
   } else if (action === "accept") {

@@ -82,6 +82,8 @@ async function req(
 }
 
 import {
+  environmentSchema,
+  isReadinessInProgress,
   defaultObservabilityPolicy,
   policySchema,
   resolvedWait,
@@ -195,6 +197,11 @@ test("new evaluation sends server-owned policy and logical journey tags", async 
     200,
   );
   assert.equal((sent.policy_context as { revision: number }).revision, 1);
+  assert.deepEqual(Object.keys(sent.policy_context as object).sort(), [
+    "policy",
+    "revision",
+    "updatedAt",
+  ]);
   assert.deepEqual(sent.journey_tags, { journey: "checkout" });
   assert.equal(
     (
@@ -324,4 +331,78 @@ test("matrix must cover all combinations and response requirements are explicit"
     defaultValue: "",
   });
   assert.equal(policySchema.safeParse(p).success, false);
+});
+
+test("aggregated history forwards actor and permissions for every analysis", async () => {
+  await saveJourney("alpha", journey);
+  await saveJourney("alpha", {
+    ...journey,
+    id: evaluationId,
+    createdAt: "2026-11-03T00:00:00Z",
+  });
+  let calls = 0;
+  globalThis.fetch = async (_url, init) => {
+    const headers = new Headers(init?.headers);
+    assert.equal(headers.get("X-AIRE-Actor"), "alice");
+    assert.ok(
+      headers.get("X-AIRE-Permissions")?.split(",").includes("readiness:read"),
+    );
+    assert.equal(headers.get("X-AIRE-Tenant"), "alpha");
+    calls++;
+    return Response.json([]);
+  };
+  const response = await call("observability/journeys");
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { items: { error: unknown }[] };
+  assert.equal(body.items[0].error, null);
+  assert.equal(calls, 2);
+});
+test("environment identifiers match the motor and reject invalid input before POST", async () => {
+  for (const value of ["lab", "prod-br", "ENV_1.2", "a".repeat(80)])
+    assert.equal(environmentSchema.safeParse(value).success, true);
+  await saveJourney("alpha", journey);
+  let posts = 0;
+  globalThis.fetch = async (_url, init) => {
+    if (init?.method === "POST") posts++;
+    return Response.json(capabilities);
+  };
+  for (const value of [
+    "",
+    "prod br",
+    " lab",
+    "lab ",
+    "produção",
+    "a".repeat(81),
+  ]) {
+    assert.equal(environmentSchema.safeParse(value).success, false);
+    assert.equal(
+      (
+        await call(`observability/journeys/${id}/evaluations`, "POST", {
+          mode: "simulation",
+          environment: value,
+        })
+      ).status,
+      422,
+    );
+  }
+  assert.equal(posts, 0);
+});
+test("polling continues through investigation and queued execution but stops on terminal or paused states", () => {
+  for (const state of [
+    "QUEUED",
+    "RUNNING",
+    "EXECUTING",
+    "DISCOVERING",
+    "EVALUATING",
+    "INVESTIGATING",
+    "EXECUTION_QUEUED",
+  ])
+    assert.equal(isReadinessInProgress(state), true);
+  for (const state of [
+    "COMPLETED",
+    "FAILED",
+    "AWAITING_CONTINUATION",
+    "AWAITING_APPROVAL",
+  ])
+    assert.equal(isReadinessInProgress(state), false);
 });
