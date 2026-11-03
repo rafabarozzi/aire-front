@@ -1,13 +1,8 @@
 "use client";
 import { useEffect, useState, useRef, type ReactNode } from "react";
-import {
-  Activity,
-  GitBranch,
-  KeyRound,
-  RefreshCw,
-  Search,
-  ShieldCheck,
-} from "lucide-react";
+import { KeyRound, RefreshCw, Search, ShieldCheck } from "lucide-react";
+import { ProviderLogo } from "./provider-logo";
+import "./connections-panel.css";
 import { request } from "@/lib/aire/client";
 import type { ConnectionsView, Session } from "@/lib/aire/types";
 type Provider = "github" | "gitlab" | "datadog" | "dynatrace";
@@ -161,6 +156,7 @@ export function ConnectionsPanel({
   onMap: (r?: string) => void;
   canMap: boolean;
 }) {
+  const repositoryCatalog = useRef<HTMLDetailsElement>(null);
   const [data, setData] = useState<ConnectionsView | null>(null),
     [connections, setConnections] = useState<Connection[]>([]);
   const [error, setError] = useState(""),
@@ -309,6 +305,16 @@ export function ConnectionsPanel({
       page === 1 ? r.repositories : [...new Set([...old, ...r.repositories])],
     );
     setNext(r.nextPage);
+    if (repositoryCatalog.current) {
+      repositoryCatalog.current.open = true;
+      repositoryCatalog.current.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+    if (page === 1 && r.repositories.length === 0) {
+      setNotice("Nenhum repositório disponível com esta credencial.");
+    }
   }
   async function add(repository: string) {
     await request("connections/repositories", {
@@ -325,10 +331,7 @@ export function ConnectionsPanel({
         <div>
           <p className="eyebrow">INTEGRAÇÕES</p>
           <h1>Conexões</h1>
-          <p>
-            Conecte as ferramentas da sua organização e escolha os repositórios
-            das jornadas.
-          </p>
+          <p>As ferramentas da sua organização, em um só lugar.</p>
         </div>
         <button
           className="button secondary"
@@ -362,7 +365,7 @@ export function ConnectionsPanel({
           <p>
             {category === "code"
               ? "GitHub e GitLab podem ser usados simultaneamente."
-              : "Prepare as conexões para a Etapa 2. Salvar ou testar não inicia coleta nem cria monitores."}
+              : "Conecte sua telemetria para avaliar a prontidão das jornadas."}
           </p>
           <div className="connection-catalog-grid">
             {(category === "code"
@@ -375,11 +378,16 @@ export function ConnectionsPanel({
                   ? c.configured
                   : p === "github" && data?.githubConfigured;
               return (
-                <article className="panel provider-card" key={p}>
+                <article
+                  className="panel provider-card integration-card"
+                  key={p}
+                >
                   <div className="provider-card-heading">
-                    {category === "code" ? <GitBranch /> : <Activity />}
+                    <ProviderLogo provider={p} />
                     <h3>{names[p]}</h3>
-                    <span className="badge">
+                    <span
+                      className={`badge connection-status ${c?.needsReplacement ? "needs-attention" : configured ? "is-saved" : "is-pending"}`}
+                    >
                       {c?.needsReplacement
                         ? "Substitua a credencial"
                         : configured
@@ -391,64 +399,74 @@ export function ConnectionsPanel({
                     {p === "github"
                       ? c?.kind === "github-app"
                         ? "GitHub App · tokens temporários"
-                        : "Token de acesso · GitHub App disponível"
+                        : "GitHub App ou token de acesso"
                       : p === "gitlab"
-                        ? "Token pessoal, de grupo ou projeto · GitLab.com"
+                        ? "Token pessoal, de grupo ou projeto"
                         : p === "datadog"
                           ? "API Key + Application Key"
                           : "Environment API Token · SaaS"}
                   </p>
-                  <details>
-                    <summary>Como configurar</summary>
-                    {guides[p]}
-                  </details>
                   {manage && (
-                    <div className="connection-toolbar">
+                    <div className="connection-toolbar provider-primary-actions">
                       <button
                         className="button secondary"
                         disabled={busy}
                         onClick={() => open(p)}
                       >
                         <KeyRound size={16} />
-                        {configured ? "Substituir credencial" : "Configurar"}
+                        {configured ? "Editar credencial" : "Configurar"}
                       </button>
-                      <button
-                        className="button secondary"
-                        disabled={busy || !configured || c?.needsReplacement}
-                        onClick={() =>
-                          run(async () => {
-                            const r = await request<{ message: string }>(
-                              "connections/integrations/" + p + "/test",
-                              { method: "POST", body: "{}" },
-                            );
-                            setNotice(r.message);
-                          })
-                        }
-                      >
-                        Testar conexão
-                      </button>
-                      {category === "code" && (
+                      {category === "code" && configured && (
                         <button
                           className="button secondary"
-                          disabled={busy || !configured || c?.needsReplacement}
+                          disabled={busy || c?.needsReplacement}
                           onClick={() =>
                             run(() => browse(p as "github" | "gitlab", 1))
                           }
                         >
-                          Buscar repositórios
+                          <Search size={16} /> Repositórios
                         </button>
                       )}
-                      {configured && (
+                    </div>
+                  )}
+                  <details className="provider-options">
+                    <summary>
+                      Orientações
+                      {manage && configured ? " e opções" : " de conexão"}
+                    </summary>
+                    <div className="provider-guide">{guides[p]}</div>
+                    {category === "observability" && (
+                      <p>
+                        Salvar ou testar não inicia coleta nem cria monitores.
+                      </p>
+                    )}
+                    {manage && configured && (
+                      <div className="connection-toolbar">
+                        <button
+                          className="button secondary"
+                          disabled={busy || c?.needsReplacement}
+                          onClick={() =>
+                            run(async () => {
+                              const r = await request<{ message: string }>(
+                                "connections/integrations/" + p + "/test",
+                                { method: "POST", body: "{}" },
+                              );
+                              setNotice(r.message);
+                            })
+                          }
+                        >
+                          Testar conexão
+                        </button>
                         <button
                           className="button secondary"
                           disabled={busy}
                           onClick={() => setRemove({ provider: p })}
                         >
-                          Remover
+                          Remover conexão
                         </button>
-                      )}
-                    </div>
-                  )}
+                      </div>
+                    )}
+                  </details>
                 </article>
               );
             })}
@@ -456,8 +474,11 @@ export function ConnectionsPanel({
         </section>
       ))}
       {manage && (
-        <section className="panel repo-catalog">
-          <h2>Adicionar repositórios</h2>
+        <details
+          className="panel repo-catalog repository-discovery"
+          ref={repositoryCatalog}
+        >
+          <summary>Adicionar repositórios</summary>
           <p>
             Consulte GitHub ou GitLab nos cartões acima e autorize os
             repositórios que poderão ser mapeados.
@@ -529,7 +550,7 @@ export function ConnectionsPanel({
               Adicionar repositório
             </button>
           </form>
-        </section>
+        </details>
       )}
       <section className="panel repo-catalog">
         <h2>Repositórios autorizados ({data?.repositories.length || 0})</h2>
