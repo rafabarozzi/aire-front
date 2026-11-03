@@ -4,6 +4,8 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { request } from "@/lib/aire/client";
 import {
+  environmentSchema,
+  isReadinessInProgress,
   resolvedWait,
   validateTags,
   type Capabilities,
@@ -73,11 +75,8 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
     };
   }, [base, refresh]);
   const current = history.find((h) => h.id === active) || history[0];
-  const running = history.some((h) =>
-    ["QUEUED", "RUNNING", "EXECUTING", "DISCOVERING", "EVALUATING"].includes(
-      h.state,
-    ),
-  );
+  const running = history.some((h) => isReadinessInProgress(h.state));
+  const environmentValid = environmentSchema.safeParse(environment).success;
   useEffect(() => {
     if (!running) return;
     const timer = setInterval(() => void refresh().catch(() => {}), 10000);
@@ -182,15 +181,24 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
             value={environment}
             onChange={(e) => setEnvironment(e.target.value)}
             maxLength={80}
+            pattern="[a-zA-Z0-9_.\-]{1,80}"
+            required
+            aria-invalid={!environmentValid}
+            aria-describedby="readiness-environment-help"
           />
         </label>
+        <small id="readiness-environment-help">
+          Use letras, números, ponto, hífen ou sublinhado, sem espaços. Exemplo:
+          prod-br.
+        </small>
         <button
           className="button primary"
           disabled={
             busy ||
             !contractReady ||
             !permissions.includes("readiness:evaluate") ||
-            !environment.trim()
+            !environmentValid ||
+            !caps?.modes.includes(mode)
           }
           onClick={() =>
             perform(async () => {
