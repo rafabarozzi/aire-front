@@ -1,4 +1,5 @@
 export const permissions = [
+  "readiness:configure",
   "readiness:read",
   "readiness:evaluate",
   "readiness:approve",
@@ -122,4 +123,3 @@ export const statusLabels: Record<AnalysisStatus, string> = {
   COMPLETED: "Análise concluída",
   FAILED: "Falha na análise",
 };
-

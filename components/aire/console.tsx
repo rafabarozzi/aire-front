@@ -67,6 +67,7 @@ import {
   topologyEdges,
 } from "@/lib/aire/demo";
 import { JourneyReport } from "./journey-report";
+import { ObservabilityHub } from "./observability-hub";
 import { ReadinessPanel } from "./readiness-panel";
 import { normalizeRepository, journeyInputSchema } from "@/lib/aire/validation";
 import { ApiError, request } from "@/lib/aire/client";
@@ -84,6 +85,7 @@ export function download(
   setTimeout(() => URL.revokeObjectURL(href), 1000);
 }
 const permissionLabels: Record<Permission, string> = {
+  "readiness:configure": "Configurar políticas de observabilidade",
   "readiness:read": "Ver prontidão operacional",
   "readiness:evaluate": "Avaliar prontidão",
   "readiness:approve": "Aceitar recomendações",
@@ -366,9 +368,16 @@ export function Console() {
           </a>
         )}
         <div className="nav-label later-label">CICLO DE CONFIABILIDADE</div>
-        <nav aria-label="Próximos módulos">
+        <nav aria-label="Ciclo de confiabilidade">
+          {can("readiness:read") && (
+            <Nav
+              icon={<Activity />}
+              label="Observabilidade"
+              active={page === "observabilidade"}
+              onClick={() => navigate("observabilidade")}
+            />
+          )}
           {[
-            ["Observabilidade", <Activity key="a" />],
             ["SLOs e error budget", <ShieldCheck key="s" />],
             ["War rooms", <Layers3 key="l" />],
           ].map(([label, icon]) => (
@@ -453,6 +462,7 @@ export function Console() {
                 : {
                     jornadas: "Jornadas",
                     conexoes: "Conexões",
+                    observabilidade: "Observabilidade",
                     acessos: "Equipe e acessos",
                     configuracoes: "Configurações",
                     "visao-geral": "Visão geral",
@@ -536,6 +546,58 @@ export function Console() {
                 setJourneys((old) => old.map((x) => (x.id === j.id ? j : x)));
               }}
             />
+          ) : page === "observabilidade" ? (
+            <ObservabilityHub session={session} demo={demo} />
+          ) : page === "visao-geral" ? (
+            <div className="obs">
+              <div className="page-heading">
+                <div>
+                  <div className="eyebrow">SEU AMBIENTE</div>
+                  <h1>Visão geral</h1>
+                  <p>
+                    Acompanhe o mapeamento e avance na prontidão operacional.
+                  </p>
+                </div>
+              </div>
+              <div className="overview-summary">
+                <article className="panel">
+                  <span>Jornadas mapeadas</span>
+                  <strong>
+                    {journeys.filter((j) => j.status === "COMPLETED").length}
+                  </strong>
+                  <button
+                    className="button secondary"
+                    onClick={() => navigate("jornadas")}
+                  >
+                    Consultar jornadas
+                  </button>
+                </article>
+                <article className="panel">
+                  <span>Mapeamentos em andamento</span>
+                  <strong>
+                    {
+                      journeys.filter(
+                        (j) => !["COMPLETED", "FAILED"].includes(j.status),
+                      ).length
+                    }
+                  </strong>
+                  <p>Consulte a lista para acompanhar cada análise.</p>
+                </article>
+                <article className="panel">
+                  <span>Prontidão operacional</span>
+                  <h2>Etapa 2</h2>
+                  <p>Revise cobertura, monitores e regras de resposta.</p>
+                  {can("readiness:read") && (
+                    <button
+                      className="button secondary"
+                      onClick={() => navigate("observabilidade")}
+                    >
+                      Abrir Observabilidade
+                    </button>
+                  )}
+                </article>
+              </div>
+            </div>
           ) : page === "conexoes" ? (
             <Connections
               demo={demo}
@@ -1472,7 +1534,10 @@ function Wizard({
                   }}
                   placeholder="https://github.com/organizacao/repositorio"
                 />
-                <small>URL HTTPS do GitHub/GitLab ou organização/repositório do GitHub.</small>
+                <small>
+                  URL HTTPS do GitHub/GitLab ou organização/repositório do
+                  GitHub.
+                </small>
               </label>
             </details>
             {repo && (
@@ -2067,14 +2132,16 @@ function JourneyDetail({
       {tab === "mapa" ? (
         !demo ? (
           <>
-          <JourneyReport
-            key={j.id}
-            analysisId={j.id}
-            ready={j.status === "COMPLETED"}
-            canRead={canExport}
-            revision={reportRevision}
-          />
-          {j.status === "COMPLETED" && <ReadinessPanel analysisId={j.id} />}
+            <JourneyReport
+              key={j.id}
+              analysisId={j.id}
+              ready={j.status === "COMPLETED"}
+              canRead={canExport}
+              revision={reportRevision}
+            />
+            {j.status === "COMPLETED" && (
+              <ReadinessPanel key={j.id} analysisId={j.id} />
+            )}
           </>
         ) : (
           <div className="detail-grid">
@@ -2753,7 +2820,10 @@ function Login({
             Continuar com Google
             <ArrowRight size={16} />
           </button>
-          <a className="login-onboarding-link" href={session.onboardingUrl || "/onboarding"}>
+          <a
+            className="login-onboarding-link"
+            href={session.onboardingUrl || "/onboarding"}
+          >
             Primeiro acesso ou configurar SSO
           </a>
           {message && (
@@ -2806,4 +2876,3 @@ function Login({
     </div>
   );
 }
-
