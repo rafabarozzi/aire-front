@@ -1,3 +1,4 @@
+import { readObservabilityPolicy } from "./observability-store.ts";
 import { z } from "zod";
 import { AppError } from "./config.ts";
 import { context } from "./session.ts";
@@ -60,6 +61,12 @@ export async function readinessApi(
   )
     throw new AppError(404, "not_found", "Ação não encontrada.");
   if (path[3] && !action) throw new AppError(404, "not_found", "Ação ausente.");
+  if ((await readObservabilityPolicy(c.tenant.id)).revision > 0)
+    throw new AppError(
+      409,
+      "policy_required",
+      "Use a área de Observabilidade para executar com as políticas da organização.",
+    );
   return (
     await engine(c.tenant, base + (action ? `/${action}` : ""), {
       method: "POST",

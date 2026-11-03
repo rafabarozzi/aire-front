@@ -1,6 +1,14 @@
 "use client";
 import { useEffect, useState, useRef, type ReactNode } from "react";
-import { KeyRound, RefreshCw, Search, ShieldCheck } from "lucide-react";
+import {
+  KeyRound,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  Cpu,
+  Ticket,
+  MessagesSquare,
+} from "lucide-react";
 import { ProviderLogo } from "./provider-logo";
 import "./connections-panel.css";
 import { request } from "@/lib/aire/client";
@@ -626,46 +634,42 @@ export function ConnectionsPanel({
             </div>
           ))}
       </section>
-      <section>
+      <section aria-label="Identidade, ambiente e próximas integrações">
         <h2>Identidade e ambiente</h2>
-        <div className="connection-catalog-grid">
-          <article className="panel provider-card">
-            <h3>
-              <ShieldCheck /> Identidade e SSO
-            </h3>
-            <p>
-              Microsoft Entra ID e Google conforme a configuração da
-              organização.
-            </p>
-            <p>
-              {data?.groups || 0} grupos vinculados. Gerencie os perfis em
-              Equipe e acessos.
-            </p>
-          </article>
-          <article className="panel provider-card">
-            <h3>Motor AIRE</h3>
-            <p>
-              {data?.engineConfigured
-                ? "Endereço e credencial configurados"
-                : "Configuração pendente"}
-            </p>
-            <p>O mapeamento usa o motor da sua organização.</p>
-          </article>
+        <div className="connection-status-list">
+          <div className="connection-status-row">
+            <ShieldCheck />
+            <div>
+              <h3>Identidade e SSO</h3>
+              <p>
+                Microsoft Entra ID · Google · {data?.groups || 0} grupos
+                vinculados
+              </p>
+            </div>
+            <span className="badge">Gerenciado pela organização</span>
+          </div>
+          <div className="connection-status-row">
+            <Cpu />
+            <div>
+              <h3>Motor AIRE</h3>
+              <p>Mapeamento e prontidão da organização</p>
+            </div>
+            <span className="badge">
+              {data?.engineConfigured ? "Configurado" : "Pendente"}
+            </span>
+          </div>
         </div>
-      </section>
-      <section>
-        <h2>Próximas integrações</h2>
-        <div className="connection-catalog-grid">
-          <article className="panel provider-card">
-            <h3>ITSM</h3>
-            <p>ServiceNow · Jira</p>
+        <div className="connection-future">
+          <div>
+            <Ticket />
+            <span>ServiceNow · Jira</span>
             <span className="badge">Em breve</span>
-          </article>
-          <article className="panel provider-card">
-            <h3>Comunicação</h3>
-            <p>Teams · Slack</p>
+          </div>
+          <div>
+            <MessagesSquare />
+            <span>Teams · Slack</span>
             <span className="badge">Em breve</span>
-          </article>
+          </div>
         </div>
       </section>
       {editRepo && (

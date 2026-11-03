@@ -264,6 +264,7 @@ export async function engine(
   tenant: Tenant,
   path: string,
   init: RequestInit = {},
+  optionalStatuses: number[] = [],
 ) {
   const base = process.env[tenant.engineUrlEnv],
     token = process.env[tenant.engineTokenEnv];
@@ -293,7 +294,7 @@ export async function engine(
     signal: AbortSignal.timeout(60000),
     cache: "no-store",
   });
-  if (!response.ok)
+  if (!response.ok && !optionalStatuses.includes(response.status))
     throw new AppError(
       response.status === 429 ? 429 : 502,
       "engine_request",
