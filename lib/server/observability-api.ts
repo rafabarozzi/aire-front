@@ -1,3 +1,12 @@
+import {
+  catalogSchema,
+  responseSelectionSchema,
+  responseContext,
+} from "../aire/operational-catalog.ts";
+import {
+  readOperationalCatalog,
+  saveOperationalCatalog,
+} from "./observability-store.ts";
 import { z } from "zod";
 import { AppError, type Tenant } from "./config.ts";
 import { context } from "./session.ts";
@@ -24,6 +33,7 @@ const capSchema = z.object({
   modes: z.array(z.enum(["simulation", "real"])),
   warRoomOverrides: z.boolean(),
   messageGeneration: z.boolean(),
+  operationalCatalog: z.boolean().optional(),
 });
 const unsupported: Capabilities = {
   policyContract: 0,
@@ -58,19 +68,51 @@ export async function observabilityApi(
   const permission =
     method === "GET"
       ? "readiness:read"
-      : path[1] === "policy"
+      : ["policy", "catalog"].includes(path[1])
         ? "readiness:configure"
         : path[3] === "preferences" || path[5] === "accept"
           ? "readiness:approve"
           : path[5] === "execute"
             ? "readiness:execute"
             : "readiness:evaluate";
-  const c = await context(request, permission);
+  const preferencesWrite = method === "PUT" && path[3] === "preferences";
+  const c = await context(request, preferencesWrite ? undefined : permission);
+  if (
+    preferencesWrite &&
+    !c.permissions.some(
+      (p) => p === "readiness:evaluate" || p === "readiness:approve",
+    )
+  )
+    throw new AppError(
+      403,
+      "forbidden",
+      "Seu perfil não permite editar os dados da jornada.",
+    );
   const headers = {
     "Content-Type": "application/json",
     "X-AIRE-Actor": c.identity.sub,
     "X-AIRE-Permissions": c.permissions.join(","),
   };
+  if (path.length === 2 && path[1] === "catalog") {
+    if (method === "GET") return readOperationalCatalog(c.tenant.id);
+    if (method === "PUT") {
+      const b = checked(
+        z
+          .object({
+            revision: z.number().int().nonnegative(),
+            catalog: catalogSchema,
+          })
+          .strict(),
+        await body(),
+      );
+      return saveOperationalCatalog(
+        c.tenant.id,
+        b.revision,
+        b.catalog,
+        c.identity.sub,
+      );
+    }
+  }
   if (path.length === 2 && path[1] === "policy") {
     if (method === "GET") return readObservabilityPolicy(c.tenant.id);
     if (method === "PUT") {
@@ -148,12 +190,24 @@ export async function observabilityApi(
     if (method === "GET") return readJourneyPreferences(c.tenant.id, j);
     if (method === "PUT") {
       const b = checked(preferencesSchema, await body());
+      if (
+        b.teamId &&
+        !(await readOperationalCatalog(c.tenant.id)).catalog.teams.some(
+          (t) => t.id === b.teamId,
+        )
+      )
+        throw new AppError(
+          422,
+          "team_invalid",
+          "Selecione uma equipe cadastrada nesta organização.",
+        );
       return saveJourneyPreferences(
         c.tenant.id,
         j,
         b.revision,
         b.tags,
         c.identity.sub,
+        b.teamId,
       );
     }
   }
@@ -210,22 +264,74 @@ export async function observabilityApi(
     const b = checked(
       z
         .object({
-          mode: z.enum(["simulation", "real"]),
-          environment: environmentSchema,
+          mode: z.enum(["simulation", "real"]).optional(),
+          environment: environmentSchema.optional(),
         })
         .strict(),
       await body(),
     );
-    if (!caps.modes.includes(b.mode))
+    if (!b.mode && !caps.operationalCatalog)
+      throw new AppError(
+        409,
+        "catalog_contract_unavailable",
+        "Novas avaliações aguardam a integração dos cadastros operacionais ao serviço de prontidão.",
+      );
+    const mode = b.mode || "real";
+    if (!caps.modes.includes(mode))
       throw new AppError(
         409,
         "mode_unavailable",
-        "Este modo não está habilitado no motor.",
+        "A avaliação com telemetria real ainda não está habilitada para esta organização.",
       );
     const policy = await readObservabilityPolicy(c.tenant.id),
       prefs = await readJourneyPreferences(c.tenant.id, j);
+    const catalog = await readOperationalCatalog(c.tenant.id);
+    const targetEnvironment =
+      b.environment || prefs.tags.env || catalog.catalog.evaluationEnvironment;
+    if (!targetEnvironment)
+      throw new AppError(
+        422,
+        "environment_required",
+        "Configure o ambiente em Observabilidade → Cadastros operacionais, ou preencha a tag env da jornada.",
+      );
+    const environment = checked(environmentSchema, targetEnvironment);
+    const missing = validateTags(prefs.tags, policy.policy);
+    if (missing.length)
+      throw new AppError(
+        422,
+        "tags_required",
+        "Preencha as tags: " + missing.join(", "),
+      );
+    if (!b.mode && !catalog.catalog.teams.some((t) => t.id === prefs.teamId))
+      throw new AppError(
+        422,
+        "team_required",
+        "Selecione uma equipe responsável.",
+      );
+    if (
+      !caps.operationalCatalog &&
+      policy.policy.response.warRoomEnabled &&
+      (!policy.policy.response.team ||
+        !policy.policy.response.onCallReference ||
+        !policy.policy.response.roomTarget)
+    )
+      throw new AppError(
+        409,
+        "catalog_contract_unavailable",
+        "A avaliação com resposta de War Room aguarda a atualização do serviço de prontidão para os cadastros operacionais.",
+      );
     payload = {
-      ...b,
+      mode,
+      environment,
+      ...(caps.operationalCatalog
+        ? {
+            operational_context: {
+              revision: catalog.revision,
+              catalog: catalog.catalog,
+              teamId: prefs.teamId,
+            },
+          }
+        : {}),
       contract_version: 1,
       requested_by_user: true,
       policy_context: {
@@ -250,6 +356,7 @@ export async function observabilityApi(
                     z.string().trim().min(1).max(200),
                   ),
                   monitor_settings: monitorSettingsSchema,
+                  response_selection: responseSelectionSchema.optional(),
                 })
                 .strict(),
             )
@@ -289,14 +396,74 @@ export async function observabilityApi(
           "Preencha as tags: " + missing.join(", "),
         );
     }
+    const snapshot = evaluation?.data.operational_context;
+    const catalog = snapshot
+      ? {
+          revision: snapshot.revision,
+          catalog: checked(catalogSchema, snapshot.catalog),
+        }
+      : undefined;
+    if (b.selections.some((s) => s.response_selection) && !catalog)
+      throw new AppError(
+        409,
+        "catalog_snapshot_missing",
+        "Inicie uma nova avaliação para usar os cadastros operacionais nesta aprovação.",
+      );
+    if (
+      b.selections.some((s) => s.response_selection) &&
+      !caps.operationalCatalog
+    )
+      throw new AppError(
+        409,
+        "catalog_contract_unavailable",
+        "A aprovação com equipes, escalas e janelas aguarda a atualização do serviço de prontidão.",
+      );
     payload = {
       contract_version: 1,
       policy_revision: evaluation?.data.policy_context?.revision,
       ...b,
-      selections: b.selections.map((s) => ({
-        ...s,
-        tags: Object.entries(s.tags).map(([k, v]) => `${k}:${v}`),
-      })),
+      selections: b.selections.map((s) => {
+        let resolved;
+        if (s.response_selection) {
+          try {
+            resolved = responseContext(
+              catalog!.catalog,
+              snapshot?.teamId || "",
+              s.response_selection,
+              s.tags,
+            );
+          } catch (e) {
+            throw new AppError(
+              422,
+              "response_configuration",
+              (e as Error).message,
+            );
+          }
+          if (
+            s.monitor_settings.warRoomEnabled &&
+            (!resolved.destination || !resolved.onCallReference)
+          )
+            throw new AppError(
+              422,
+              "warroom_configuration",
+              "Para ativar War Room, selecione uma escala e configure uma rota para a sala.",
+            );
+        }
+        return {
+          id: s.id,
+          version: s.version,
+          monitor_settings: s.monitor_settings,
+          ...(resolved
+            ? {
+                response_context: {
+                  catalogRevision: catalog!.revision,
+                  ...resolved,
+                },
+              }
+            : {}),
+          tags: Object.entries(s.tags).map(([k, v]) => `${k}:${v}`),
+        };
+      }),
     };
   } else if (action === "execute") {
     payload = {

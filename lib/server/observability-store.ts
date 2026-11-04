@@ -1,4 +1,9 @@
 import {
+  catalogSchema,
+  emptyCatalog,
+  type CatalogRecord,
+} from "../aire/operational-catalog.ts";
+import {
   mkdir,
   readFile,
   writeFile,
@@ -18,7 +23,11 @@ import {
 } from "../aire/observability.ts";
 import { journeyKey } from "../aire/journey-identity.ts";
 import type { Journey } from "../aire/types.ts";
-export type Preferences = { revision: number; tags: Record<string, string> };
+export type Preferences = {
+  revision: number;
+  tags: Record<string, string>;
+  teamId?: string;
+};
 async function read<T>(tenant: string, name: string, fallback: T): Promise<T> {
   try {
     return JSON.parse(
@@ -127,13 +136,39 @@ export function saveJourneyPreferences(
   revision: number,
   tags: Record<string, string>,
   actor: string,
+  teamId?: string,
 ) {
   return save<Preferences>(
     tenant,
     preferenceName(j),
     revision,
-    { tags },
+    { tags, teamId },
     actor,
     { revision: 0, tags: {} },
+  );
+}
+
+export async function readOperationalCatalog(
+  tenant: string,
+): Promise<CatalogRecord> {
+  const record = await read<CatalogRecord>(tenant, "catalog", {
+    revision: 0,
+    catalog: emptyCatalog(),
+  });
+  return { ...record, catalog: catalogSchema.parse(record.catalog) };
+}
+export function saveOperationalCatalog(
+  tenant: string,
+  revision: number,
+  catalog: CatalogRecord["catalog"],
+  actor: string,
+) {
+  return save<CatalogRecord>(
+    tenant,
+    "catalog",
+    revision,
+    { catalog: catalogSchema.parse(catalog) },
+    actor,
+    { revision: 0, catalog: emptyCatalog() },
   );
 }

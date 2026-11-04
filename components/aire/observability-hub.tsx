@@ -4,6 +4,7 @@ import { Activity, RefreshCw, Settings2, Search } from "lucide-react";
 import { request } from "@/lib/aire/client";
 import type { Journey, Session } from "@/lib/aire/types";
 import type { ReadinessEvaluation } from "@/lib/aire/observability";
+import { OperationalCatalogEditor } from "./operational-catalog";
 import { ObservabilityPolicyEditor } from "./observability-policy";
 import { ReadinessPanel } from "./readiness-panel";
 import "./observability.css";
@@ -80,12 +81,22 @@ export function ObservabilityHub({
           <Settings2 size={16} />
           Regras da organização
         </button>
+        <button
+          className={`button ${tab === "catalog" ? "primary" : "secondary"}`}
+          onClick={() => setTab("catalog")}
+        >
+          Cadastros operacionais
+        </button>
       </div>
       {demo ? (
         <div className="panel">
           Entre em uma organização para consultar avaliações e configurar suas
           regras.
         </div>
+      ) : tab === "catalog" ? (
+        <OperationalCatalogEditor
+          editable={session.permissions.includes("readiness:configure")}
+        />
       ) : tab === "policy" ? (
         <ObservabilityPolicyEditor
           editable={session.permissions.includes("readiness:configure")}

@@ -278,3 +278,27 @@
     flex-wrap: wrap;
   }
 }
+.obs-catalog-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 16px;
+  margin: 20px 0;
+}
+.obs-catalog-row > label {
+  flex: 1 1 180px;
+}
+.obs-catalog-item {
+  border-top: 1px solid var(--border, #dce4f0);
+  padding: 20px 0;
+  display: grid;
+  gap: 16px;
+}
+.obs-policy .obs-tag-row {
+  grid-template-columns: minmax(180px, 1fr) auto auto;
+}
+@media (max-width: 640px) {
+  .obs-policy .obs-tag-row {
+    grid-template-columns: 1fr;
+  }
+}

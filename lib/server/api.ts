@@ -4,6 +4,8 @@ import { z } from "zod";
 import { AppError } from "./config.ts";
 import {
   checkOrigin,
+  renewSession,
+  revokeSession,
   context,
   cookie,
   SESSION_COOKIE,
@@ -71,6 +73,11 @@ const json = (value: unknown, status = 200) =>
     },
   });
 export async function api(request: Request, path: string[]) {
+  const response = await handleApi(request, path);
+  if (path.join("/") === "logout") return response;
+  return renewSession(request, response);
+}
+async function handleApi(request: Request, path: string[]) {
   try {
     if (request.method !== "GET") checkOrigin(request);
     if (path[0] === "platform")
@@ -165,6 +172,7 @@ export async function api(request: Request, path: string[]) {
       }
     }
     if (path.join("/") === "logout" && request.method === "POST") {
+      await revokeSession(request);
       const headers = new Headers({ "Cache-Control": "no-store" });
       for (const name of [SESSION_COOKIE, FLOW_COOKIE, ONBOARDING_COOKIE])
         headers.append("Set-Cookie", cookie(name, "", 0));

@@ -1327,50 +1327,89 @@ function Wizard({
       .then((r) => setRepositories(r.repositories))
       .catch((e) => setError(e.message));
   }, [demo]);
-  async function validate() {
-    setError("");
-    setErrorCode("");
-    setConnection(null);
-    setBusy(true);
-    try {
-      let normalized: string;
+  const [validating, setValidating] = useState(false);
+  const [validationAttempt, setValidationAttempt] = useState(0);
+  const [existing, setExisting] = useState(false);
+  useEffect(() => {
+    let live = true;
+    const timer = setTimeout(async () => {
+      setConnection(null);
+      setError("");
+      setErrorCode("");
+      if (!repo.trim()) return;
+      setValidating(true);
       try {
-        normalized = normalizeRepository(repo);
-      } catch {
-        throw new ApiError(
-          "Informe uma URL de repositório GitHub ou GitLab válida.",
-          "repository_format",
-        );
-      }
-      if (demo) {
-        if (normalized !== "northeia-lab/commerce-demo")
-          throw new Error(
-            "Na demonstração, use northeia-lab/commerce-demo. Repositórios reais serão validados no ambiente integrado.",
-          );
-        setConnection({
-          repository: normalized,
-          branch: ref || "main",
-          revision: demoJourneys[0].revision,
-          private: false,
-          demo: true,
-        });
-      } else
-        setConnection(
-          await request<Repository>("repositories/validate", {
-            method: "POST",
-            body: JSON.stringify({
+        const normalized = normalizeRepository(repo);
+        const result = demo
+          ? {
               repository: normalized,
-              ...(ref ? { ref } : {}),
-            }),
-          }),
+              branch: ref || "main",
+              revision: demoJourneys[0].revision,
+              private: false,
+              demo: true,
+            }
+          : await request<Repository>("repositories/validate", {
+              method: "POST",
+              body: JSON.stringify({
+                repository: normalized,
+                ...(ref ? { ref } : {}),
+              }),
+            });
+        if (demo && normalized !== "northeia-lab/commerce-demo")
+          throw Error("Selecione o repositório de demonstração.");
+        if (live) setConnection(result);
+      } catch (e) {
+        if (live) {
+          setError((e as Error).message);
+          setErrorCode(e instanceof ApiError ? e.code : "service_error");
+        }
+      } finally {
+        if (live) setValidating(false);
+      }
+    }, 500);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [repo, ref, demo, validationAttempt]);
+  useEffect(() => {
+    let live = true;
+    void Promise.resolve().then(() => {
+      if (live) {
+        setExisting(false);
+        setReanalyze(false);
+      }
+    });
+    if (step !== 3 || demo || !connection) return;
+    request<Journey[]>("journeys")
+      .then(async (all) => {
+        const key = journeyKey({
+          repository: connection.repository,
+          endpoint,
+          sourceSubdirectory: subdir,
+        });
+        const match = all.find((j) => journeyKey(j) === key);
+        if (!match) return;
+        const versions = await request<Journey[]>(
+          `journeys/${match.id}/history`,
         );
-    } catch (e) {
-      setError((e as Error).message);
-      setErrorCode(e instanceof ApiError ? e.code : "service_error");
-    } finally {
-      setBusy(false);
-    }
-  }
+        if (live)
+          setExisting(
+            versions.some(
+              (j) =>
+                j.status === "COMPLETED" &&
+                j.revision === connection.revision &&
+                j.tier === tier,
+            ),
+          );
+      })
+      .catch(() => {
+        /* Server still performs the authoritative reuse check. */
+      });
+    return () => {
+      live = false;
+    };
+  }, [step, demo, connection, endpoint, subdir, tier]);
   async function start() {
     setError("");
     const data = {
@@ -1442,12 +1481,12 @@ function Wizard({
         ))}
       </div>
       <div className="wizard-body">
-        {step === 3 && !demo && (
+        {step === 3 && !demo && existing && (
           <div className="notice">
             <div>
               <p>
-                Jornadas existentes são reunidas pelo repositório, endpoint e
-                subdiretório. Uma revisão nova gera uma versão no histórico.
+                Já existe um mapeamento para esta versão do código. Deseja
+                refazê-lo?
               </p>
               <label>
                 <input
@@ -1455,8 +1494,7 @@ function Wizard({
                   checked={reanalyze}
                   onChange={(e) => setReanalyze(e.target.checked)}
                 />{" "}
-                Reanalisar também se este commit já tiver resultado (consome
-                IA).
+                Refazer o mapeamento
               </label>
             </div>
           </div>
@@ -1558,22 +1596,9 @@ function Wizard({
                 placeholder="Branch padrão do repositório"
               />
             </label>
-            <button
-              className="button secondary validate-button"
-              disabled={busy || !repo.trim()}
-              onClick={validate}
-            >
-              {busy ? (
-                <LoaderCircle className="spin" size={16} />
-              ) : (
-                <Github size={16} />
-              )}
-              {busy
-                ? "Validando acesso…"
-                : demo
-                  ? "Validar exemplo"
-                  : "Validar conexão"}
-            </button>
+            {validating && (
+              <p role="status">Verificando acesso ao repositório…</p>
+            )}
             {connection && (
               <div className="connection-success">
                 <CheckCircle2 size={20} />
@@ -1701,7 +1726,7 @@ function Wizard({
               <p>
                 {demo
                   ? "A simulação cria uma jornada de exemplo nesta sessão. Ela não valida o código nem produz um manifesto canônico."
-                  : "O código será enviado ao motor da sua organização. O motor mapeia a jornada, gera a narrativa com o provedor de IA configurado e valida a resposta antes de disponibilizar os artefatos."}
+                  : "Vamos mapear a jornada e preparar os resultados para você acompanhar na plataforma."}
               </p>
             </div>
           </>
@@ -1718,7 +1743,7 @@ function Wizard({
           <ConnectionInstructions
             code={errorCode}
             onManage={onManage ? () => onManage(repo, ref) : undefined}
-            onRetry={validate}
+            onRetry={() => setValidationAttempt((n) => n + 1)}
             busy={busy}
           />
         )}
@@ -1756,7 +1781,7 @@ function Wizard({
               <Workflow size={16} />
             )}
             {busy
-              ? "Enviando ao motor…"
+              ? "Iniciando mapeamento…"
               : demo
                 ? "Simular mapeamento"
                 : "Iniciar mapeamento"}

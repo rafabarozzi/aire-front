@@ -118,17 +118,10 @@ export const policySchema = z
         code: "custom",
         message: "Informe o destino alternativo fora do horário.",
       });
-    if (
-      p.response.warRoomEnabled &&
-      (!p.response.severities.length ||
-        !p.response.team ||
-        !p.response.onCallReference ||
-        !p.response.roomTarget)
-    )
+    if (p.response.warRoomEnabled && !p.response.severities.length)
       c.addIssue({
         code: "custom",
-        message:
-          "Para habilitar War Room, informe severidades, equipe, escala e destino da sala.",
+        message: "Selecione as severidades elegíveis para War Room.",
       });
     for (const r of p.rules)
       if (
@@ -151,6 +144,7 @@ export type Capabilities = {
   modes: ("simulation" | "real")[];
   warRoomOverrides: boolean;
   messageGeneration: boolean;
+  operationalCatalog?: boolean;
 };
 export function defaultObservabilityPolicy(): ObservabilityPolicy {
   return {
@@ -207,6 +201,7 @@ export function suggestedRules(): ObservabilityPolicy["rules"] {
 export const preferencesSchema = z
   .object({
     revision: z.number().int().nonnegative(),
+    teamId: z.string().uuid().optional(),
     tags: z
       .record(tagKeySchema, text)
       .refine((v) => Object.keys(v).length <= 40),
@@ -242,6 +237,11 @@ export type ReadinessEvaluation = {
   state: string;
   data: {
     input: { mode: string };
+    operational_context?: {
+      revision: number;
+      catalog: import("./operational-catalog.ts").OperationalCatalog;
+      teamId?: string;
+    };
     policy_context?: { revision: number; policy: ObservabilityPolicy };
     pause_reason?: string;
     recommendations: ReadinessRecommendation[];
