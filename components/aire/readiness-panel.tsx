@@ -44,6 +44,8 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
     [report, setReport] = useState("");
   const [catalog, setCatalog] = useState<CatalogRecord>();
   const [teamId, setTeamId] = useState("");
+  const [environments, setEnvironments] = useState<string[]>([]);
+  const [environment, setEnvironment] = useState("");
   const [newTeam, setNewTeam] = useState<string | null>(null);
   const [responses, setResponses] = useState<Record<string, ResponseSelection>>(
     {},
@@ -54,6 +56,8 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
   }, [base]);
   useEffect(() => {
     let live = true;
+    setEnvironments([]);
+    setEnvironment("");
     Promise.all([
       request<{ permissions: string[] }>("session"),
       request<Capabilities>("observability/capabilities"),
@@ -65,6 +69,15 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
         if (!live) return;
         setPermissions(s.permissions);
         setCaps(c);
+        if (s.permissions.includes("readiness:evaluate") && c.serverContext) {
+          void request<{ environments: string[] }>("observability/environments")
+            .then((result) => {
+              if (live) setEnvironments(result.environments);
+            })
+            .catch((e) => {
+              if (live) setError(e.message);
+            });
+        }
         setPolicy(p);
         setPrefs(pf);
         setTeamId(pf.teamId || "");
@@ -89,7 +102,13 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
     };
   }, [base, refresh]);
   const current = history.find((h) => h.id === active) || history[0];
-  const running = history.some((h) => isReadinessInProgress(h.state));
+  const waitingForCapacity = (h: ReadinessEvaluation) =>
+    h.data.read_only &&
+    h.data.pause_reason === "account_capacity" &&
+    ["QUEUED", "AWAITING_CONTINUATION", "INVESTIGATING"].includes(h.state);
+  const running = history.some(
+    (h) => isReadinessInProgress(h.state) || waitingForCapacity(h),
+  );
 
   useEffect(() => {
     if (!running) return;
@@ -271,18 +290,33 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
           )}
         </div>
       )}
-      {contractReady && !caps?.modes.includes("real") && (
-        <p className="obs-notice">
-          A conexão está cadastrada, mas a avaliação com telemetria real ainda
-          aguarda habilitação. As avaliações simuladas anteriores continuam
-          disponíveis no histórico.
-        </p>
-      )}
-      {caps?.modes.includes("real") && !caps.operationalCatalog && (
-        <p className="obs-notice">
-          Novas avaliações aguardam a integração dos cadastros operacionais ao
-          serviço de prontidão.
-        </p>
+      {contractReady &&
+        !caps?.serverContext &&
+        !caps?.modes.includes("real") && (
+          <p className="obs-notice">
+            A conexão está cadastrada, mas a avaliação com telemetria real ainda
+            aguarda habilitação. As avaliações simuladas anteriores continuam
+            disponíveis no histórico.
+          </p>
+        )}
+      {caps?.serverContext && permissions.includes("readiness:evaluate") && (
+        <label>
+          Ambiente Datadog
+          <select
+            value={environment}
+            onChange={(e) => setEnvironment(e.target.value)}
+          >
+            <option value="">Selecione um ambiente</option>
+            {environments.map((env) => (
+              <option key={env} value={env}>
+                {env}
+              </option>
+            ))}
+          </select>
+          {!environments.length && (
+            <small>Nenhum ambiente disponível para avaliação.</small>
+          )}
+        </label>
       )}
       <div className="obs-toolbar">
         <button
@@ -291,8 +325,10 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
             busy ||
             !contractReady ||
             !permissions.includes("readiness:evaluate") ||
-            !caps?.modes.includes("real") ||
-            !caps?.operationalCatalog ||
+            (!caps?.serverContext && !caps?.modes.includes("real")) ||
+            (caps?.serverContext
+              ? !environments.includes(environment)
+              : !caps?.operationalCatalog) ||
             !teamId
           }
           onClick={() =>
@@ -304,7 +340,15 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
               await saveTags(tags);
               const result = await request<ReadinessEvaluation>(
                 base + "/evaluations",
-                { method: "POST", body: "{}" },
+                {
+                  method: "POST",
+                  body: JSON.stringify(
+                    caps?.serverContext ? { environment } : {},
+                  ),
+                },
+              );
+              setCaps(
+                await request<Capabilities>("observability/capabilities"),
               );
               setActive(result.id);
               setSelected({});
@@ -357,6 +401,13 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
       {current && (
         <>
           <div>
+            {current.data.input.mode !== "simulation" &&
+              !caps?.realExecution && (
+                <p className="obs-notice">
+                  É possível consultar a avaliação e revisar as recomendações. A
+                  aplicação de alterações no Datadog ainda aguarda habilitação.
+                </p>
+              )}
             <strong>
               {current.data.input.mode === "simulation"
                 ? "SIMULAÇÃO — sem alterações no provedor"
@@ -368,28 +419,39 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
                 ? `Política versão ${current.data.policy_context?.revision}`
                 : "Avaliação anterior ao suporte de políticas"}
             </p>
-            {current.data.pause_reason && <p>{current.data.pause_reason}</p>}
-            {current.state === "AWAITING_CONTINUATION" && (
-              <button
-                className="button secondary"
-                disabled={
-                  busy ||
-                  !editable ||
-                  !permissions.includes("readiness:evaluate")
-                }
-                onClick={() =>
-                  perform(async () => {
-                    await request(`${base}/evaluations/${current.id}/resume`, {
-                      method: "POST",
-                      body: "{}",
-                    });
-                    await refresh();
-                  })
-                }
-              >
-                Retomar investigação
-              </button>
+            {waitingForCapacity(current) ? (
+              <p role="status">
+                Aguardando capacidade. A investigação continuará
+                automaticamente.
+              </p>
+            ) : (
+              current.data.pause_reason && <p>{current.data.pause_reason}</p>
             )}
+            {current.state === "AWAITING_CONTINUATION" &&
+              !waitingForCapacity(current) && (
+                <button
+                  className="button secondary"
+                  disabled={
+                    busy ||
+                    !editable ||
+                    !permissions.includes("readiness:evaluate")
+                  }
+                  onClick={() =>
+                    perform(async () => {
+                      await request(
+                        `${base}/evaluations/${current.id}/resume`,
+                        {
+                          method: "POST",
+                          body: "{}",
+                        },
+                      );
+                      await refresh();
+                    })
+                  }
+                >
+                  Retomar investigação
+                </button>
+              )}
           </div>
           <details>
             <summary>
@@ -505,7 +567,10 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
                       <input
                         type="checkbox"
                         disabled={
-                          busy || !effectivePolicy.response.warRoomEnabled
+                          busy ||
+                          !effectivePolicy.response.warRoomEnabled ||
+                          (current.data.input.mode !== "simulation" &&
+                            !caps?.realResponses)
                         }
                         checked={s.warRoomEnabled}
                         onChange={(e) =>
@@ -739,7 +804,10 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
                     <button
                       className="button primary"
                       disabled={
-                        busy || !permissions.includes("readiness:execute")
+                        busy ||
+                        !permissions.includes("readiness:execute") ||
+                        (current.data.input.mode !== "simulation" &&
+                          !caps?.realExecution)
                       }
                       onClick={() =>
                         perform(async () => {

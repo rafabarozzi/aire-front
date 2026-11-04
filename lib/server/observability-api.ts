@@ -10,7 +10,7 @@ import {
 import { z } from "zod";
 import { AppError, type Tenant } from "./config.ts";
 import { context } from "./session.ts";
-import { engine } from "./upstream.ts";
+import { boundedBody, engine } from "./upstream.ts";
 import { getJourney, listJourneys, journeyHistory } from "./store.ts";
 import {
   readObservabilityPolicy,
@@ -34,6 +34,20 @@ const capSchema = z.object({
   warRoomOverrides: z.boolean(),
   messageGeneration: z.boolean(),
   operationalCatalog: z.boolean().optional(),
+  serverContext: z.boolean().optional(),
+  defaultContext: z
+    .object({
+      mode: z.enum(["simulation", "real"]).nullable().optional(),
+      environment: z.string().nullable().optional(),
+      ready: z.boolean(),
+      reason: z.string().nullable().optional(),
+    })
+    .optional(),
+  realRead: z
+    .object({ ready: z.boolean(), reason: z.string().nullable().optional() })
+    .optional(),
+  realExecution: z.boolean().default(false),
+  realResponses: z.boolean().default(false),
 });
 const unsupported: Capabilities = {
   policyContract: 0,
@@ -48,6 +62,36 @@ export async function readinessCapabilities(
   if (!r.ok) return unsupported;
   const parsed = capSchema.safeParse(await r.json());
   return parsed.success ? parsed.data : unsupported;
+}
+async function validateRealRead(
+  tenant: Tenant,
+  headers: Record<string, string>,
+) {
+  const response = await engine(
+    tenant,
+    "/v1/readiness/integration/validate",
+    {
+      method: "POST",
+      headers,
+      body: "{}",
+    },
+    [404, 501, 409, 422, 503],
+  );
+  if (!response.ok)
+    throw new AppError(
+      409,
+      "read_validation_unavailable",
+      "A leitura do Datadog ainda não pôde ser validada. Confira a configuração do ambiente e a conexão do motor com as credenciais.",
+    );
+  const result = z
+    .object({ ready: z.boolean() })
+    .safeParse(await response.json());
+  if (!result.success || !result.data.ready)
+    throw new AppError(
+      409,
+      "read_validation_failed",
+      "Não foi possível confirmar a leitura do Datadog. Verifique permissões, conexão e orçamento de consultas antes de tentar novamente.",
+    );
 }
 function checked<S extends z.ZodTypeAny>(schema: S, raw: unknown): z.output<S> {
   const r = schema.safeParse(raw);
@@ -67,7 +111,9 @@ export async function observabilityApi(
   const method = request.method;
   const permission =
     method === "GET"
-      ? "readiness:read"
+      ? path[1] === "environments"
+        ? "readiness:evaluate"
+        : "readiness:read"
       : ["policy", "catalog"].includes(path[1])
         ? "readiness:configure"
         : path[3] === "preferences" || path[5] === "accept"
@@ -93,6 +139,19 @@ export async function observabilityApi(
     "X-AIRE-Actor": c.identity.sub,
     "X-AIRE-Permissions": c.permissions.join(","),
   };
+  if (method === "GET" && path.length === 2 && path[1] === "environments") {
+    const r = await engine(
+      c.tenant,
+      "/v1/readiness/environments",
+      { headers },
+      [404, 501],
+    );
+    if (!r.ok) return { environments: [] };
+    return checked(
+      z.object({ environments: z.array(environmentSchema) }),
+      await r.json(),
+    );
+  }
   if (path.length === 2 && path[1] === "catalog") {
     if (method === "GET") return readOperationalCatalog(c.tenant.id);
     if (method === "PUT") {
@@ -246,7 +305,11 @@ export async function observabilityApi(
     (evaluationId && !["accept", "execute", "resume"].includes(action))
   )
     throw new AppError(404, "not_found", "Ação não encontrada.");
-  const caps = await readinessCapabilities(c.tenant);
+  let caps = await readinessCapabilities(c.tenant);
+  if (!evaluationId && caps.serverContext) {
+    await validateRealRead(c.tenant, headers);
+    caps = await readinessCapabilities(c.tenant);
+  }
   if (caps.policyContract !== 1 || !caps.warRoomOverrides)
     throw new AppError(
       409,
@@ -270,14 +333,15 @@ export async function observabilityApi(
         .strict(),
       await body(),
     );
-    if (!b.mode && !caps.operationalCatalog)
+    const discovery = !!b.environment && !b.mode;
+    if (!discovery && !b.mode && !caps.operationalCatalog)
       throw new AppError(
         409,
         "catalog_contract_unavailable",
         "Novas avaliações aguardam a integração dos cadastros operacionais ao serviço de prontidão.",
       );
     const mode = b.mode || "real";
-    if (!caps.modes.includes(mode))
+    if (!discovery && !caps.modes.includes(mode))
       throw new AppError(
         409,
         "mode_unavailable",
@@ -286,8 +350,23 @@ export async function observabilityApi(
     const policy = await readObservabilityPolicy(c.tenant.id),
       prefs = await readJourneyPreferences(c.tenant.id, j);
     const catalog = await readOperationalCatalog(c.tenant.id);
-    const targetEnvironment =
-      b.environment || prefs.tags.env || catalog.catalog.evaluationEnvironment;
+    const targetEnvironment = discovery
+      ? b.environment
+      : caps.serverContext
+        ? caps.defaultContext?.environment
+        : b.environment ||
+          prefs.tags.env ||
+          catalog.catalog.evaluationEnvironment;
+    if (
+      !discovery &&
+      caps.serverContext &&
+      (!caps.defaultContext?.ready || caps.defaultContext.mode !== "real")
+    )
+      throw new AppError(
+        409,
+        "evaluation_context_unavailable",
+        "Configure no motor o ambiente real da telemetria para iniciar a avaliação.",
+      );
     if (!targetEnvironment)
       throw new AppError(
         422,
@@ -309,6 +388,7 @@ export async function observabilityApi(
         "Selecione uma equipe responsável.",
       );
     if (
+      !discovery &&
       !caps.operationalCatalog &&
       policy.policy.response.warRoomEnabled &&
       (!policy.policy.response.team ||
@@ -320,10 +400,33 @@ export async function observabilityApi(
         "catalog_contract_unavailable",
         "A avaliação com resposta de War Room aguarda a atualização do serviço de prontidão para os cadastros operacionais.",
       );
+    let manifestRevision: string | undefined;
+    if (discovery) {
+      const artifact = await engine(
+        c.tenant,
+        `/v1/analyses/${j.id}/artifacts/manifest`,
+      );
+      const manifest = checked(
+        z.object({
+          integrity: z.object({
+            contentSha256: z.string().regex(/^[a-f0-9]{64}$/i),
+          }),
+        }),
+        JSON.parse(
+          new TextDecoder().decode(
+            await boundedBody(artifact, 10 * 1024 * 1024),
+          ),
+        ),
+      );
+      manifestRevision = manifest.integrity.contentSha256;
+    }
     payload = {
-      mode,
-      environment,
-      ...(caps.operationalCatalog
+      ...(discovery
+        ? { mode, environment, manifest_revision: manifestRevision }
+        : caps.serverContext
+          ? {}
+          : { mode, environment }),
+      ...(discovery || caps.operationalCatalog
         ? {
             operational_context: {
               revision: catalog.revision,
@@ -339,7 +442,13 @@ export async function observabilityApi(
         updatedAt: policy.updatedAt,
         policy: policy.policy,
       },
-      journey_tags: prefs.tags,
+      journey_tags: Object.fromEntries(
+        Object.entries(prefs.tags).filter(
+          ([key]) =>
+            key === policy.policy.tags.journeyKey ||
+            policy.policy.tags.definitions.some((t) => t.key === key),
+        ),
+      ),
     };
   } else if (action === "accept") {
     const b = checked(
@@ -387,6 +496,16 @@ export async function observabilityApi(
           422,
           "warroom_disabled",
           "War Room está desabilitada na política desta avaliação.",
+        );
+      if (
+        s.monitor_settings.warRoomEnabled &&
+        evaluation?.data.input?.mode !== "simulation" &&
+        !caps.realResponses
+      )
+        throw new AppError(
+          409,
+          "real_responses_unavailable",
+          "O acionamento de respostas ainda aguarda habilitação. Revise o monitor sem ativar War Room.",
         );
       const missing = validateTags(s.tags, policy);
       if (missing.length)
@@ -466,6 +585,13 @@ export async function observabilityApi(
       }),
     };
   } else if (action === "execute") {
+    const simulation = evaluation?.data.input?.mode === "simulation";
+    if (!simulation && !caps.realExecution)
+      throw new AppError(
+        409,
+        "real_execution_unavailable",
+        "Esta integração permite avaliar a telemetria. A aplicação de alterações ainda aguarda habilitação.",
+      );
     payload = {
       contract_version: 1,
       ...checked(

@@ -145,6 +145,16 @@ export type Capabilities = {
   warRoomOverrides: boolean;
   messageGeneration: boolean;
   operationalCatalog?: boolean;
+  serverContext?: boolean;
+  defaultContext?: {
+    mode?: "simulation" | "real" | null;
+    environment?: string | null;
+    ready: boolean;
+    reason?: string | null;
+  };
+  realRead?: { ready: boolean; reason?: string | null };
+  realExecution?: boolean;
+  realResponses?: boolean;
 };
 export function defaultObservabilityPolicy(): ObservabilityPolicy {
   return {
@@ -244,6 +254,7 @@ export type ReadinessEvaluation = {
     };
     policy_context?: { revision: number; policy: ObservabilityPolicy };
     pause_reason?: string;
+    read_only?: boolean;
     recommendations: ReadinessRecommendation[];
     findings: {
       service?: string;
