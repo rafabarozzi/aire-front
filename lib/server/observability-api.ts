@@ -10,7 +10,7 @@ import {
 import { z } from "zod";
 import { AppError, type Tenant } from "./config.ts";
 import { context } from "./session.ts";
-import { engine } from "./upstream.ts";
+import { boundedBody, engine } from "./upstream.ts";
 import { getJourney, listJourneys, journeyHistory } from "./store.ts";
 import {
   readObservabilityPolicy,
@@ -111,7 +111,9 @@ export async function observabilityApi(
   const method = request.method;
   const permission =
     method === "GET"
-      ? "readiness:read"
+      ? path[1] === "environments"
+        ? "readiness:evaluate"
+        : "readiness:read"
       : ["policy", "catalog"].includes(path[1])
         ? "readiness:configure"
         : path[3] === "preferences" || path[5] === "accept"
@@ -137,6 +139,19 @@ export async function observabilityApi(
     "X-AIRE-Actor": c.identity.sub,
     "X-AIRE-Permissions": c.permissions.join(","),
   };
+  if (method === "GET" && path.length === 2 && path[1] === "environments") {
+    const r = await engine(
+      c.tenant,
+      "/v1/readiness/environments",
+      { headers },
+      [404, 501],
+    );
+    if (!r.ok) return { environments: [] };
+    return checked(
+      z.object({ environments: z.array(environmentSchema) }),
+      await r.json(),
+    );
+  }
   if (path.length === 2 && path[1] === "catalog") {
     if (method === "GET") return readOperationalCatalog(c.tenant.id);
     if (method === "PUT") {
@@ -318,14 +333,15 @@ export async function observabilityApi(
         .strict(),
       await body(),
     );
-    if (!b.mode && !caps.operationalCatalog)
+    const discovery = !!b.environment && !b.mode;
+    if (!discovery && !b.mode && !caps.operationalCatalog)
       throw new AppError(
         409,
         "catalog_contract_unavailable",
         "Novas avaliações aguardam a integração dos cadastros operacionais ao serviço de prontidão.",
       );
     const mode = b.mode || "real";
-    if (!caps.modes.includes(mode))
+    if (!discovery && !caps.modes.includes(mode))
       throw new AppError(
         409,
         "mode_unavailable",
@@ -334,12 +350,15 @@ export async function observabilityApi(
     const policy = await readObservabilityPolicy(c.tenant.id),
       prefs = await readJourneyPreferences(c.tenant.id, j);
     const catalog = await readOperationalCatalog(c.tenant.id);
-    const targetEnvironment = caps.serverContext
-      ? caps.defaultContext?.environment
-      : b.environment ||
-        prefs.tags.env ||
-        catalog.catalog.evaluationEnvironment;
+    const targetEnvironment = discovery
+      ? b.environment
+      : caps.serverContext
+        ? caps.defaultContext?.environment
+        : b.environment ||
+          prefs.tags.env ||
+          catalog.catalog.evaluationEnvironment;
     if (
+      !discovery &&
       caps.serverContext &&
       (!caps.defaultContext?.ready || caps.defaultContext.mode !== "real")
     )
@@ -369,6 +388,7 @@ export async function observabilityApi(
         "Selecione uma equipe responsável.",
       );
     if (
+      !discovery &&
       !caps.operationalCatalog &&
       policy.policy.response.warRoomEnabled &&
       (!policy.policy.response.team ||
@@ -380,9 +400,33 @@ export async function observabilityApi(
         "catalog_contract_unavailable",
         "A avaliação com resposta de War Room aguarda a atualização do serviço de prontidão para os cadastros operacionais.",
       );
+    let manifestRevision: string | undefined;
+    if (discovery) {
+      const artifact = await engine(
+        c.tenant,
+        `/v1/analyses/${j.id}/artifacts/manifest`,
+      );
+      const manifest = checked(
+        z.object({
+          integrity: z.object({
+            contentSha256: z.string().regex(/^[a-f0-9]{64}$/i),
+          }),
+        }),
+        JSON.parse(
+          new TextDecoder().decode(
+            await boundedBody(artifact, 10 * 1024 * 1024),
+          ),
+        ),
+      );
+      manifestRevision = manifest.integrity.contentSha256;
+    }
     payload = {
-      ...(caps.serverContext ? {} : { mode, environment }),
-      ...(caps.operationalCatalog
+      ...(discovery
+        ? { mode, environment, manifest_revision: manifestRevision }
+        : caps.serverContext
+          ? {}
+          : { mode, environment }),
+      ...(discovery || caps.operationalCatalog
         ? {
             operational_context: {
               revision: catalog.revision,

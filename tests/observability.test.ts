@@ -658,6 +658,95 @@ test("server context validates expired read proof before creation, preserves wri
   assert.equal(caps.realExecution, false);
   assert.equal(caps.realResponses, false);
 });
+test("discovery sends selected environment, canonical digest and team with the catalog gate closed", async () => {
+  const { emptyCatalog } = await import("../lib/aire/operational-catalog.ts");
+  const { saveOperationalCatalog } =
+    await import("../lib/server/observability-store.ts");
+  await saveJourney("alpha", journey);
+  await saveOperationalCatalog(
+    "alpha",
+    0,
+    { ...emptyCatalog(), teams: [{ id: evaluationId, name: "Commerce" }] },
+    "alice",
+  );
+  const p = defaultObservabilityPolicy();
+  p.tags.journeyKey = "jornada";
+  await saveObservabilityPolicy("alpha", 0, p, "alice");
+  await saveJourneyPreferences(
+    "alpha",
+    journey,
+    0,
+    { jornada: "checkout", journey: "old-key" },
+    "alice",
+    evaluationId,
+  );
+  const calls: string[] = [];
+  let validated = false;
+  let payload: Record<string, unknown> = {};
+  globalThis.fetch = async (u, init) => {
+    const path = new URL(String(u)).pathname;
+    calls.push(path);
+    if (path.endsWith("/environments"))
+      return Response.json({ environments: ["staging"] });
+    if (path.endsWith("/artifacts/manifest"))
+      return Response.json({ integrity: { contentSha256: "a".repeat(64) } });
+    if (path.endsWith("/integration/validate")) {
+      assert.equal(init?.method, "POST");
+      assert.deepEqual(JSON.parse(String(init?.body)), {});
+      assert.equal(new Headers(init?.headers).get("X-AIRE-Actor"), "alice");
+      validated = true;
+      return Response.json({ ready: true });
+    }
+    if (path.endsWith("/capabilities"))
+      return Response.json({
+        ...capabilities,
+        modes: validated ? ["real"] : [],
+        operationalCatalog: false,
+        serverContext: true,
+        defaultContext: {
+          mode: "real",
+          environment: "commerce-lab",
+          ready: validated,
+        },
+        realRead: { ready: validated },
+        realExecution: false,
+        realResponses: false,
+      });
+    payload = JSON.parse(String(init?.body));
+    return Response.json({ id: evaluationId });
+  };
+  assert.equal(
+    (
+      await call(`observability/journeys/${id}/evaluations`, "POST", {
+        environment: "staging",
+      })
+    ).status,
+    200,
+  );
+  assert.deepEqual(calls.slice(0, 3), [
+    "/v1/readiness/capabilities",
+    "/v1/readiness/integration/validate",
+    "/v1/readiness/capabilities",
+  ]);
+  assert.equal(payload.mode, "real");
+  assert.equal(payload.environment, "staging");
+  assert.equal(payload.manifest_revision, "a".repeat(64));
+  assert.equal(
+    (payload.operational_context as { teamId: string }).teamId,
+    evaluationId,
+  );
+  assert.deepEqual(await (await call("observability/environments")).json(), {
+    environments: ["staging"],
+  });
+  assert.deepEqual(payload.journey_tags, { jornada: "checkout" });
+  const result = await call("observability/capabilities");
+  const caps = (await result.json()) as {
+    realExecution: boolean;
+    realResponses: boolean;
+  };
+  assert.equal(caps.realExecution, false);
+  assert.equal(caps.realResponses, false);
+});
 test("failed real read probe blocks creation without fallback or exposing provider bodies", async () => {
   await saveJourney("alpha", journey);
   let mutations = 0;

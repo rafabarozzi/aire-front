@@ -44,6 +44,8 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
     [report, setReport] = useState("");
   const [catalog, setCatalog] = useState<CatalogRecord>();
   const [teamId, setTeamId] = useState("");
+  const [environments, setEnvironments] = useState<string[]>([]);
+  const [environment, setEnvironment] = useState("");
   const [newTeam, setNewTeam] = useState<string | null>(null);
   const [responses, setResponses] = useState<Record<string, ResponseSelection>>(
     {},
@@ -54,6 +56,8 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
   }, [base]);
   useEffect(() => {
     let live = true;
+    setEnvironments([]);
+    setEnvironment("");
     Promise.all([
       request<{ permissions: string[] }>("session"),
       request<Capabilities>("observability/capabilities"),
@@ -65,6 +69,15 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
         if (!live) return;
         setPermissions(s.permissions);
         setCaps(c);
+        if (s.permissions.includes("readiness:evaluate") && c.serverContext) {
+          void request<{ environments: string[] }>("observability/environments")
+            .then((result) => {
+              if (live) setEnvironments(result.environments);
+            })
+            .catch((e) => {
+              if (live) setError(e.message);
+            });
+        }
         setPolicy(p);
         setPrefs(pf);
         setTeamId(pf.teamId || "");
@@ -280,13 +293,25 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
             disponíveis no histórico.
           </p>
         )}
-      {(caps?.serverContext || caps?.modes.includes("real")) &&
-        !caps?.operationalCatalog && (
-          <p className="obs-notice">
-            Novas avaliações aguardam a integração dos cadastros operacionais ao
-            serviço de prontidão.
-          </p>
-        )}
+      {caps?.serverContext && permissions.includes("readiness:evaluate") && (
+        <label>
+          Ambiente Datadog
+          <select
+            value={environment}
+            onChange={(e) => setEnvironment(e.target.value)}
+          >
+            <option value="">Selecione um ambiente</option>
+            {environments.map((env) => (
+              <option key={env} value={env}>
+                {env}
+              </option>
+            ))}
+          </select>
+          {!environments.length && (
+            <small>Nenhum ambiente disponível para avaliação.</small>
+          )}
+        </label>
+      )}
       <div className="obs-toolbar">
         <button
           className="button primary"
@@ -295,7 +320,9 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
             !contractReady ||
             !permissions.includes("readiness:evaluate") ||
             (!caps?.serverContext && !caps?.modes.includes("real")) ||
-            !caps?.operationalCatalog ||
+            (caps?.serverContext
+              ? !environments.includes(environment)
+              : !caps?.operationalCatalog) ||
             !teamId
           }
           onClick={() =>
@@ -307,7 +334,12 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
               await saveTags(tags);
               const result = await request<ReadinessEvaluation>(
                 base + "/evaluations",
-                { method: "POST", body: "{}" },
+                {
+                  method: "POST",
+                  body: JSON.stringify(
+                    caps?.serverContext ? { environment } : {},
+                  ),
+                },
               );
               setCaps(
                 await request<Capabilities>("observability/capabilities"),
