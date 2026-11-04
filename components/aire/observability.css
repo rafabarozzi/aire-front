@@ -65,6 +65,9 @@
   gap: 20px;
   margin: 18px 0;
 }
+.obs-grid {
+  align-items: start;
+}
 .obs-options > label {
   border: 1px solid var(--border, #dce4ef);
   padding: 18px;
