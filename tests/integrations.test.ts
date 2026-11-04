@@ -426,7 +426,7 @@ test("observability tests use approved hosts and read-only operations", async ()
         "https://api.datadoghq.eu/api/v2/validate_keys",
       );
       assert.equal(new Headers(init?.headers).get("DD-APPLICATION-KEY"), token);
-      return Response.json({ valid: true });
+      return Response.json({ status: "ok" });
     }
     assert.equal(
       String(input),

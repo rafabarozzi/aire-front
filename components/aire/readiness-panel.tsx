@@ -271,19 +271,22 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
           )}
         </div>
       )}
-      {contractReady && !caps?.modes.includes("real") && (
-        <p className="obs-notice">
-          A conexão está cadastrada, mas a avaliação com telemetria real ainda
-          aguarda habilitação. As avaliações simuladas anteriores continuam
-          disponíveis no histórico.
-        </p>
-      )}
-      {caps?.modes.includes("real") && !caps.operationalCatalog && (
-        <p className="obs-notice">
-          Novas avaliações aguardam a integração dos cadastros operacionais ao
-          serviço de prontidão.
-        </p>
-      )}
+      {contractReady &&
+        !caps?.serverContext &&
+        !caps?.modes.includes("real") && (
+          <p className="obs-notice">
+            A conexão está cadastrada, mas a avaliação com telemetria real ainda
+            aguarda habilitação. As avaliações simuladas anteriores continuam
+            disponíveis no histórico.
+          </p>
+        )}
+      {(caps?.serverContext || caps?.modes.includes("real")) &&
+        !caps?.operationalCatalog && (
+          <p className="obs-notice">
+            Novas avaliações aguardam a integração dos cadastros operacionais ao
+            serviço de prontidão.
+          </p>
+        )}
       <div className="obs-toolbar">
         <button
           className="button primary"
@@ -291,7 +294,7 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
             busy ||
             !contractReady ||
             !permissions.includes("readiness:evaluate") ||
-            !caps?.modes.includes("real") ||
+            (!caps?.serverContext && !caps?.modes.includes("real")) ||
             !caps?.operationalCatalog ||
             !teamId
           }
@@ -305,6 +308,9 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
               const result = await request<ReadinessEvaluation>(
                 base + "/evaluations",
                 { method: "POST", body: "{}" },
+              );
+              setCaps(
+                await request<Capabilities>("observability/capabilities"),
               );
               setActive(result.id);
               setSelected({});
@@ -357,6 +363,13 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
       {current && (
         <>
           <div>
+            {current.data.input.mode !== "simulation" &&
+              !caps?.realExecution && (
+                <p className="obs-notice">
+                  É possível consultar a avaliação e revisar as recomendações. A
+                  aplicação de alterações no Datadog ainda aguarda habilitação.
+                </p>
+              )}
             <strong>
               {current.data.input.mode === "simulation"
                 ? "SIMULAÇÃO — sem alterações no provedor"
@@ -505,7 +518,10 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
                       <input
                         type="checkbox"
                         disabled={
-                          busy || !effectivePolicy.response.warRoomEnabled
+                          busy ||
+                          !effectivePolicy.response.warRoomEnabled ||
+                          (current.data.input.mode !== "simulation" &&
+                            !caps?.realResponses)
                         }
                         checked={s.warRoomEnabled}
                         onChange={(e) =>
@@ -739,7 +755,10 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
                     <button
                       className="button primary"
                       disabled={
-                        busy || !permissions.includes("readiness:execute")
+                        busy ||
+                        !permissions.includes("readiness:execute") ||
+                        (current.data.input.mode !== "simulation" &&
+                          !caps?.realExecution)
                       }
                       onClick={() =>
                         perform(async () => {

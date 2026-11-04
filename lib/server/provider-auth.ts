@@ -133,7 +133,7 @@ export async function testProvider(
         },
       }),
     );
-    if (d.valid !== true)
+    if (d.status !== "ok")
       throw new AppError(
         422,
         "integration_invalid",
