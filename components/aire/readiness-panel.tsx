@@ -102,7 +102,13 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
     };
   }, [base, refresh]);
   const current = history.find((h) => h.id === active) || history[0];
-  const running = history.some((h) => isReadinessInProgress(h.state));
+  const waitingForCapacity = (h: ReadinessEvaluation) =>
+    h.data.read_only &&
+    h.data.pause_reason === "account_capacity" &&
+    ["QUEUED", "AWAITING_CONTINUATION", "INVESTIGATING"].includes(h.state);
+  const running = history.some(
+    (h) => isReadinessInProgress(h.state) || waitingForCapacity(h),
+  );
 
   useEffect(() => {
     if (!running) return;
@@ -413,28 +419,39 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
                 ? `Política versão ${current.data.policy_context?.revision}`
                 : "Avaliação anterior ao suporte de políticas"}
             </p>
-            {current.data.pause_reason && <p>{current.data.pause_reason}</p>}
-            {current.state === "AWAITING_CONTINUATION" && (
-              <button
-                className="button secondary"
-                disabled={
-                  busy ||
-                  !editable ||
-                  !permissions.includes("readiness:evaluate")
-                }
-                onClick={() =>
-                  perform(async () => {
-                    await request(`${base}/evaluations/${current.id}/resume`, {
-                      method: "POST",
-                      body: "{}",
-                    });
-                    await refresh();
-                  })
-                }
-              >
-                Retomar investigação
-              </button>
+            {waitingForCapacity(current) ? (
+              <p role="status">
+                Aguardando capacidade. A investigação continuará
+                automaticamente.
+              </p>
+            ) : (
+              current.data.pause_reason && <p>{current.data.pause_reason}</p>
             )}
+            {current.state === "AWAITING_CONTINUATION" &&
+              !waitingForCapacity(current) && (
+                <button
+                  className="button secondary"
+                  disabled={
+                    busy ||
+                    !editable ||
+                    !permissions.includes("readiness:evaluate")
+                  }
+                  onClick={() =>
+                    perform(async () => {
+                      await request(
+                        `${base}/evaluations/${current.id}/resume`,
+                        {
+                          method: "POST",
+                          body: "{}",
+                        },
+                      );
+                      await refresh();
+                    })
+                  }
+                >
+                  Retomar investigação
+                </button>
+              )}
           </div>
           <details>
             <summary>

@@ -254,6 +254,7 @@ export type ReadinessEvaluation = {
     };
     policy_context?: { revision: number; policy: ObservabilityPolicy };
     pause_reason?: string;
+    read_only?: boolean;
     recommendations: ReadinessRecommendation[];
     findings: {
       service?: string;
