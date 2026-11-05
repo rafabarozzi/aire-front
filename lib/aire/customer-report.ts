@@ -70,17 +70,25 @@ export function draftDescription(m: EntryMonitoring) {
   return `Preparar um monitor que sinalize pelo menos uma resposta HTTP 5xx em cinco minutos na rota ${m.method} ${m.route}. O rascunho permite revisar a regra no Datadog. A publicação para alertar a equipe exige uma decisão separada.`;
 }
 export const draftReasons: Record<string, string> = {
-  draft_write_disabled: "O ambiente está em leitura. O rascunho está disponível para consulta.",
-  inventory_visibility_unattested: "O AIRE precisa confirmar a cobertura existente antes de propor a criação.",
+  draft_write_disabled:
+    "O ambiente está em leitura. O rascunho está disponível para consulta.",
+  inventory_visibility_unattested:
+    "O AIRE precisa confirmar a cobertura existente antes de propor a criação.",
   validated_draft_required: "O rascunho aguarda validação no Datadog.",
-  draft_inventory_conflict: "O AIRE identificou um monitor com possível sobreposição e precisa conferir o escopo.",
+  draft_inventory_conflict:
+    "O AIRE identificou um monitor com possível sobreposição e precisa conferir o escopo.",
   draft_evidence_stale: "Uma nova medição é necessária para propor a criação.",
-  draft_evaluation_superseded: "Consulte a avaliação mais recente desta jornada.",
+  draft_evaluation_superseded:
+    "Consulte a avaliação mais recente desta jornada.",
   connection_changed: "O AIRE precisa verificar a conexão atual da jornada.",
 };
 export function customerReport(
   evaluation: ReadinessEvaluation,
-  draftState?: { state: string; monitor_id: string | null; reason?: string | null } | null,
+  draftState?: {
+    state: string;
+    monitor_id: string | null;
+    reason?: string | null;
+  } | null,
 ) {
   const { data } = evaluation;
   const counts = new Map<string, number>();
@@ -104,7 +112,7 @@ export function customerReport(
       lines.push(
         `Período medido UTC · ${new Date(m.from * 1000).toISOString()} a ${new Date(m.to * 1000).toISOString()}`,
       );
-    if (m.monitor_draft)
+    if (m.monitor_draft && !data.monitor_plan)
       lines.push(
         "",
         draftDescription(m),
@@ -115,7 +123,34 @@ export function customerReport(
           : "Validação do Datadog pendente.",
       );
     if (m.matching_monitor_ids?.length)
-      lines.push(`Monitores com a mesma condição · ${m.matching_monitor_ids.join(", ")}.`);
+      lines.push(
+        `Monitores com a mesma condição · ${m.matching_monitor_ids.join(", ")}.`,
+      );
+  }
+  if (data.monitor_plan) {
+    lines.push("", "## Plano de monitoramento", "");
+    for (const p of data.monitor_plan.proposals) {
+      const d = evaluation.plan_decisions?.[p.id];
+      lines.push(
+        `### ${p.action === "adjust" ? "Ajustar" : "Criar"} · ${p.title} · ${p.severity}`,
+        "",
+        p.monitor_id ? `Monitor Datadog #${p.monitor_id}` : "Novo monitor",
+        p.trigger,
+        p.before || "",
+        p.reason,
+        p.safeguards,
+        p.validation,
+        d?.version === p.version
+          ? `Decisão registrada · ${d.choice === "approved" ? "Aprovada" : "Recusada"}`
+          : "Decisão pendente",
+        "",
+        "```json",
+        JSON.stringify(p.configuration, null, 2),
+        "```",
+        "",
+      );
+    }
+    lines.push(...data.monitor_plan.gaps);
   }
   if (draftState) {
     const states: Record<string, string> = {
@@ -134,9 +169,14 @@ export function customerReport(
       lines.push(draftReasons[draftState.reason]);
   }
   if (data.entry_monitoring?.inventory_full_visibility === false)
-    lines.push("", "A visibilidade do inventário é parcial. Cabe ao AIRE conferir a cobertura equivalente antes de criar outro monitor.");
+    lines.push(
+      "",
+      "A visibilidade do inventário é parcial. Cabe ao AIRE conferir a cobertura equivalente antes de criar outro monitor.",
+    );
   lines.push(
-    "", "## Cobertura e investigações técnicas do AIRE", "",
+    "",
+    "## Cobertura e investigações técnicas do AIRE",
+    "",
     `Achados por escopo: ${counts.get("adequate") ?? 0} adequados, ${counts.get("adjustment_recommended") ?? 0} com ajuste em análise, ${counts.get("confirmed_gap") ?? 0} lacunas confirmadas e ${counts.get("unverified") ?? 0} por verificar.`,
   );
   for (const group of coverageGroups(data.customer_recommendations ?? [])) {

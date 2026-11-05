@@ -302,7 +302,15 @@ export type CustomerReview = {
   revision: number;
   decisions: Record<string, CustomerDecision>;
 };
+export type PlanProposal = {
+  id: string; version: string; action: "create" | "adjust"; title: string; trigger: string;
+  signal: string; role: string; severity: string; reason: string; safeguards: string;
+  validation: string; configuration: Record<string, unknown>; monitor_id?: number; before?: string;
+};
+export type PlanDecisions = Record<string,{ version: string; choice: "approved" | "declined"; decided_at: string }>;
 export type ReadinessEvaluation = {
+  plan_decisions?: PlanDecisions;
+  plan_reviewable?: boolean;
   customer_review?: CustomerReview;
   id: string;
   analysis?: string;
@@ -322,6 +330,7 @@ export type ReadinessEvaluation = {
     pause_reason?: string;
     read_only?: boolean;
     entry_monitoring?: EntryMonitoring;
+    monitor_plan?: {proposals: PlanProposal[]; gaps: string[]; tier: string};
     customer_recommendations?: CustomerRecommendation[];
     recommendations: ReadinessRecommendation[];
     findings: {

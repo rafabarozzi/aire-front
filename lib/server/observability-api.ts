@@ -139,7 +139,7 @@ export async function observabilityApi(
         : "readiness:read"
       : ["policy", "catalog"].includes(path[1])
         ? "readiness:configure"
-        : path[3] === "preferences" || ["accept", "decision"].includes(path[5])
+        : path[3] === "preferences" || ["accept", "decision", "plan-decision"].includes(path[5])
           ? "readiness:approve"
           : path[5] === "execute"
             ? "readiness:execute"
@@ -336,6 +336,18 @@ export async function observabilityApi(
       await engine(c.tenant, panel ? base + "?view=panel" : base, { headers })
     ).json();
     return Promise.all(list.map((row) => withCustomerReview(c.tenant.id, row)));
+  }
+  if (method === "POST" && action === "plan-decision" && evaluation) {
+    const selection = checked(z.object({
+      proposal:z.string().min(1).max(128), version:z.string().regex(/^[0-9a-f]{64}$/),
+      choice:z.enum(["approved","declined"]),
+    }).strict(),await body());
+    const response=await engine(c.tenant,base+"/plan-decision",{
+      method,headers,body:JSON.stringify({...selection,analysis_id:j.id}),
+    },[403,404,409]);
+    if (!response.ok) throw new AppError(response.status,"decision_unavailable",
+      "A decisão não foi registrada. Atualize a página e consulte a avaliação mais recente.");
+    return response.json();
   }
   if (method === "POST" && action === "decision" && evaluation) {
     throw new AppError(409, "advisory_only", "Esta observação técnica não autoriza uma alteração no provedor.");

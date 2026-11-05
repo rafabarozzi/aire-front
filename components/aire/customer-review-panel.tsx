@@ -12,6 +12,7 @@ import {
   SlidersHorizontal,
   BellRing,
 } from "lucide-react";
+import { MonitoringPlan } from "./monitoring-plan";
 import { EntryOverview } from "./entry-overview";
 import styles from "./customer-review.module.css";
 import { useState } from "react";
@@ -23,7 +24,10 @@ import {
   scopeText,
   seriesText,
 } from "@/lib/aire/customer-report";
-import type { ReadinessEvaluation } from "@/lib/aire/observability";
+import type {
+  PlanDecisions,
+  ReadinessEvaluation,
+} from "@/lib/aire/observability";
 
 const sections = [
   ["adjust", "Monitores com ajustes em análise", SlidersHorizontal],
@@ -42,13 +46,25 @@ export function CustomerReviewPanel({
   permissions: string[];
 }) {
   const [draftState, setDraftState] = useState<DraftStatus | null>(null);
+  const [updatedDecisions, setDecisions] = useState<PlanDecisions>({});
+  const decisions = { ...evaluation.plan_decisions, ...updatedDecisions };
+  const plan = evaluation.data.monitor_plan;
   const proposals = evaluation.data.customer_recommendations ?? [];
   const entry = evaluation.data.entry_monitoring;
   const draft = entry?.monitor_draft;
   return (
     <section aria-label="Proteção da jornada" className={styles.review}>
       {entry && <EntryOverview entry={entry} />}
-      {draft && (
+      {plan && (
+        <MonitoringPlan
+          evaluation={evaluation}
+          base={base}
+          permissions={permissions}
+          decisions={decisions}
+          onDecisions={setDecisions}
+        />
+      )}
+      {!plan && draft && (
         <article className={styles.proposal}>
           <div className={styles.proposalIcon}>
             <BellRing size={21} aria-hidden />
@@ -99,7 +115,10 @@ export function CustomerReviewPanel({
           onClick={() =>
             download(
               `recomendacoes-${evaluation.id}.md`,
-              customerReport(evaluation, draftState),
+              customerReport(
+                { ...evaluation, plan_decisions: decisions },
+                draftState,
+              ),
             )
           }
         >

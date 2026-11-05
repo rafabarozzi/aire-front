@@ -336,3 +336,54 @@
     padding: 12px;
   }
 }
+.plan {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.plan h3 {
+  font-size: 22px;
+  font-weight: 650;
+  color: var(--ink);
+}
+.plan header p,
+.planCard p {
+  font-size: 14px;
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}
+.planCard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: clamp(14px, 2vw, 22px);
+}
+.planCard h4 {
+  margin: 8px 0;
+  font-size: 18px;
+  font-weight: 650;
+  color: var(--ink);
+}
+.planMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  font-size: 13px;
+}
+.planMeta b {
+  color: var(--blue);
+}
+.planMeta span {
+  background: var(--surface-soft);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2px 8px;
+  color: var(--ink);
+}
+.planCard summary {
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--blue);
+  padding-block: 9px;
+}
