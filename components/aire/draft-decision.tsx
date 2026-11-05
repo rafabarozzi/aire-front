@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { draftReasons } from "@/lib/aire/customer-report";
 import { request } from "@/lib/aire/client";
+import styles from "./customer-review.module.css";
 
 export type DraftStatus = {
   state:
@@ -20,10 +21,12 @@ export function DraftDecision({
   base,
   permissions,
   onStatus,
+  partialInventory,
 }: {
   base: string;
   permissions: string[];
   onStatus: (s: DraftStatus) => void;
+  partialInventory?: boolean;
 }) {
   const path = base + "/entry-draft";
   const [status, setStatus] = useState<DraftStatus | null>(null);
@@ -79,7 +82,7 @@ export function DraftDecision({
     }
   }
   return (
-    <div aria-live="polite">
+    <div className={styles.decision} aria-live="polite">
       {error && (
         <p role="alert">
           {error}{" "}
@@ -115,6 +118,19 @@ export function DraftDecision({
         </p>
       ) : !status ? (
         !error && <p>Consultando disponibilidade…</p>
+      ) : !status.eligible && status.reason === "draft_write_disabled" ? (
+        <div>
+          <strong>
+            Alerta proposto · nenhuma aprovação pendente para você
+          </strong>
+          <p>
+            {partialInventory &&
+              "O AIRE precisa conferir a cobertura dos monitores existentes. "}
+            Se a organização optar por criar o rascunho, o administrador da
+            integração habilita a escrita no Datadog. A publicação do alerta é
+            uma decisão posterior.
+          </p>
+        </div>
       ) : !status.eligible ? (
         <p>
           {draftReasons[status.reason || ""] ||

@@ -4,6 +4,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { request } from "@/lib/aire/client";
 import {
+  evaluationLabel,
   isReadinessInProgress,
   resolvedWait,
   validateTags,
@@ -25,11 +26,17 @@ type Preferences = {
   tags: Record<string, string>;
   teamId?: string;
 };
-export function ReadinessPanel({ analysisId }: { analysisId: string }) {
+export function ReadinessPanel({
+  analysisId,
+  initialEvaluationId,
+}: {
+  analysisId: string;
+  initialEvaluationId?: string;
+}) {
   const base = `observability/journeys/${analysisId}`;
   const [permissions, setPermissions] = useState<string[]>([]),
     [history, setHistory] = useState<ReadinessEvaluation[]>([]),
-    [active, setActive] = useState(""),
+    [active, setActive] = useState(initialEvaluationId || ""),
     [caps, setCaps] = useState<Capabilities>(),
     [policy, setPolicy] = useState<PolicyRecord>(),
     [prefs, setPrefs] = useState<Preferences>(),
@@ -53,7 +60,9 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
   );
   const [bulk, setBulk] = useState<ResponseSelection>(emptyResponseSelection());
   const refresh = useCallback(async () => {
-    setHistory(await request<ReadinessEvaluation[]>(base + "/evaluations?view=panel"));
+    setHistory(
+      await request<ReadinessEvaluation[]>(base + "/evaluations?view=panel"),
+    );
   }, [base]);
   useEffect(() => {
     let live = true;
@@ -175,18 +184,8 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
         ]),
       ]
     : Object.keys(tags);
-  return (
-    <section
-      className="obs panel readiness-panel"
-      aria-label="Prontidão operacional"
-    >
-      <div>
-        <div className="eyebrow">ETAPA 2</div>
-        <h2>Prontidão operacional</h2>
-        <p>
-          Investigue a cobertura e revise cada alteração antes de executá-la.
-        </p>
-      </div>
+  const setup = (
+    <>
       {!contractReady && (
         <p className="obs-notice">
           Histórico disponível para consulta. Novas avaliações e execuções
@@ -364,6 +363,22 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
           {busy ? "Aguarde…" : "Iniciar avaliação"}
         </button>
       </div>
+    </>
+  );
+  return (
+    <section
+      className="obs panel readiness-panel"
+      aria-label="Prontidão operacional"
+    >
+      <div>
+        <div className="eyebrow">ETAPA 2</div>
+        <h2>Monitoramento da jornada</h2>
+        <p>
+          {current?.data.manifest?.journey?.name ||
+            "Avaliação de cobertura no Datadog"}
+        </p>
+      </div>
+      {!current && setup}
       {error && (
         <p role="alert" className="obs-notice">
           {error}
@@ -375,8 +390,8 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
         </p>
       )}
       {history.length > 0 && (
-        <label>
-          Avaliação
+        <label className="review-history">
+          Histórico de avaliações
           <select
             value={current?.id || ""}
             onChange={(e) => {
@@ -391,9 +406,12 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
             {history.map((h) => (
               <option key={h.id} value={h.id}>
                 {h.created_at
-                  ? new Date(h.created_at).toLocaleString("pt-BR")
+                  ? new Date(h.created_at).toLocaleString("pt-BR", {
+                      timeZone: "UTC",
+                      timeZoneName: "short",
+                    })
                   : h.id}{" "}
-                · {h.state}
+                · {evaluationLabel(h.state)}
               </option>
             ))}
           </select>
@@ -401,32 +419,50 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
       )}
       {current && (
         <>
-          <div>
+          <div className="review-context">
+            <span>
+              <b>
+                {current.data.input.mode === "simulation"
+                  ? "Simulação"
+                  : "Ambiente"}
+              </b>{" "}
+              {current.data.input.environment ||
+                (current.data.input.mode === "simulation"
+                  ? ""
+                  : "não informado")}
+            </span>
+            <span>{evaluationLabel(current.state)}</span>
             {current.data.input.mode !== "simulation" &&
-              !caps?.realExecution && (
-                <p className="obs-notice">
-                  É possível consultar a avaliação e revisar as recomendações. A
-                  publicação de alertas ativos no Datadog aguarda habilitação.
-                </p>
+              caps &&
+              !caps.realExecution && (
+                <span>Publicação de alertas desabilitada</span>
               )}
-            <strong>
-              {current.data.input.mode === "simulation"
-                ? "SIMULAÇÃO — sem alterações no provedor"
-                : "AMBIENTE REAL"}
-            </strong>
-            <p>
-              {current.state} ·{" "}
-              {evaluatedPolicy
-                ? `Política versão ${current.data.policy_context?.revision}`
-                : "Avaliação anterior ao suporte de políticas"}
-            </p>
+          </div>
+          {(current.data.entry_monitoring ||
+            !!current.data.customer_recommendations?.length) && (
+            <CustomerReviewPanel
+              key={current.id}
+              evaluation={current}
+              base={base + "/evaluations/" + current.id}
+              permissions={permissions}
+            />
+          )}
+          <div className="review-operations">
             {waitingForCapacity(current) ? (
               <p role="status">
                 Aguardando capacidade. A investigação continuará
                 automaticamente.
               </p>
             ) : (
-              current.data.pause_reason && <p>{current.data.pause_reason}</p>
+              current.data.pause_reason && (
+                <p>
+                  {current.data.pause_reason === "evidence_incomplete"
+                    ? current.data.read_only
+                      ? "O AIRE pode consultar novamente os dados pendentes desta avaliação em modo leitura, usando o mesmo período."
+                      : "Ainda faltam evidências para concluir a análise de cobertura."
+                    : "A avaliação requer acompanhamento. Consulte os detalhes técnicos."}
+                </p>
+              )
             )}
             {current.state === "AWAITING_CONTINUATION" &&
               !waitingForCapacity(current) && (
@@ -450,17 +486,30 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
                     })
                   }
                 >
-                  Retomar investigação
+                  {current.data.read_only &&
+                  current.data.pause_reason === "evidence_incomplete"
+                    ? "Repetir consultas pendentes"
+                    : "Retomar avaliação"}
                 </button>
               )}
           </div>
-          {(current.data.entry_monitoring || !!current.data.customer_recommendations?.length) && (
-            <CustomerReviewPanel key={current.id} evaluation={current} base={base + "/evaluations/" + current.id} permissions={permissions} />
-          )}
-          <details>
+          <details className="review-advanced">
             <summary>
-              Cobertura e evidências ({current.data.findings.length})
+              Dados técnicos da avaliação{" "}
+              <span>{current.data.findings.length} achados</span>
             </summary>
+            <p>
+              Estado do motor · <code>{current.state}</code>
+              {current.data.pause_reason && (
+                <>
+                  {" "}
+                  · <code>{current.data.pause_reason}</code>
+                </>
+              )}
+              {evaluatedPolicy && (
+                <> · Política versão {current.data.policy_context?.revision}</>
+              )}
+            </p>
             {current.data.findings.map((f, i) => (
               <article key={i}>
                 <p>
@@ -668,21 +717,23 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
               </article>
             );
           })}
-          <button
-            className="button secondary"
-            disabled={
-              busy ||
-              !chosen.length ||
-              !editable ||
-              !permissions.includes("readiness:approve")
-            }
-            onClick={() => {
-              setReview(true);
-              invalidate();
-            }}
-          >
-            Revisar {chosen.length} recomendações e tags
-          </button>
+          {rows.length > 0 && (
+            <button
+              className="button secondary"
+              disabled={
+                busy ||
+                !chosen.length ||
+                !editable ||
+                !permissions.includes("readiness:approve")
+              }
+              onClick={() => {
+                setReview(true);
+                invalidate();
+              }}
+            >
+              Revisar {chosen.length} recomendações e tags
+            </button>
+          )}
         </>
       )}
       {review && effectivePolicy && prefs && (
@@ -862,6 +913,12 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
         >
           Consultar relatório consolidado
         </button>
+      )}
+      {current && (
+        <details className="review-advanced">
+          <summary>Configurar nova avaliação</summary>
+          {setup}
+        </details>
       )}
       {report && (
         <article className="panel">

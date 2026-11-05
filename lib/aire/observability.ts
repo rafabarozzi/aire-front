@@ -366,3 +366,20 @@ export function isReadinessInProgress(state: string): boolean {
     "EXECUTION_QUEUED",
   ].includes(state);
 }
+
+const evaluationLabels: Record<string, string> = {
+  QUEUED: "Na fila",
+  RUNNING: "Em andamento",
+  INVESTIGATING: "Investigação em andamento",
+  DISCOVERING: "Coletando evidências",
+  EVALUATING: "Avaliando cobertura",
+  AWAITING_CONTINUATION: "Análise parcial",
+  READY: "Avaliação disponível",
+  COMPLETED: "Concluída",
+  EXECUTION_QUEUED: "Execução na fila",
+  EXECUTING: "Aplicando alterações",
+  FAILED: "Falha na avaliação",
+};
+export function evaluationLabel(state: string) {
+  return Object.hasOwn(evaluationLabels, state) ? evaluationLabels[state] : "Consultar detalhes";
+}
