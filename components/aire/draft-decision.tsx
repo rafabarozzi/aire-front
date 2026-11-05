@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { draftReasons } from "@/lib/aire/customer-report";
 import { request } from "@/lib/aire/client";
 
 export type DraftStatus = {
@@ -14,18 +15,6 @@ export type DraftStatus = {
   revision: string | null;
   reason: string | null;
   monitor_id: string | null;
-};
-const reasons: Record<string, string> = {
-  draft_write_disabled:
-    "O ambiente está em leitura. O rascunho está disponível para consulta.",
-  inventory_visibility_unattested:
-    "O AIRE precisa confirmar a cobertura existente antes de propor a criação.",
-  validated_draft_required: "O rascunho aguarda validação no Datadog.",
-  draft_inventory_conflict:
-    "O AIRE identificou um monitor com possível sobreposição e precisa conferir o escopo.",
-  draft_evidence_stale: "Uma nova medição é necessária para propor a criação.",
-  draft_evaluation_superseded: "Consulte a avaliação mais recente desta jornada.",
-  connection_changed: "O AIRE precisa verificar a conexão atual da jornada.",
 };
 export function DraftDecision({
   base,
@@ -128,7 +117,7 @@ export function DraftDecision({
         !error && <p>Consultando disponibilidade…</p>
       ) : !status.eligible ? (
         <p>
-          {reasons[status.reason || ""] ||
+          {draftReasons[status.reason || ""] ||
             "A aplicação aguarda a verificação de elegibilidade pelo motor."}
         </p>
       ) : status.state === "approved" ? (

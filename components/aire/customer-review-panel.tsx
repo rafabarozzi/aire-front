@@ -5,6 +5,7 @@ import { download } from "@/lib/aire/download";
 import {
   coverageGroups,
   customerReport,
+  draftDescription,
   observationText,
   scopeText,
   seriesText,
@@ -64,9 +65,7 @@ export function CustomerReviewPanel({
         <article className="obs-rec">
           <h4>Preparar a detecção de erros na entrada</h4>
           <p>
-            Monitor em rascunho para detectar pelo menos uma resposta HTTP 5xx
-            em cinco minutos na rota {entry?.route}. A publicação do alerta e o
-            acionamento de equipes exigem uma decisão separada.
+            {draftDescription(entry)}
           </p>
           <p>
             {draft.validation === "validated"

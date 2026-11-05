@@ -284,6 +284,7 @@ export type EntryMonitoring = {
   buckets_with_5xx?: number;
   buckets_without_traffic_witness?: number;
   query?: string;
+  inventory_full_visibility?: boolean;
   matching_monitor_ids?: (number | string)[];
   monitor_draft?: {
     validation: string;

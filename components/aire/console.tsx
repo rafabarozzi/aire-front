@@ -206,6 +206,7 @@ export function Console() {
       if (
         [
           "jornadas",
+          "observabilidade",
           "conexoes",
           "acessos",
           "configuracoes",

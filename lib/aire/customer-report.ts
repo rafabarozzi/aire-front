@@ -66,9 +66,21 @@ const actions: Record<string, string> = {
   create: "Cobertura a completar",
   investigate: "Investigação do AIRE",
 };
+export function draftDescription(m: EntryMonitoring) {
+  return `Preparar um monitor que sinalize pelo menos uma resposta HTTP 5xx em cinco minutos na rota ${m.method} ${m.route}. O rascunho permite revisar a regra no Datadog. A publicação para alertar a equipe exige uma decisão separada.`;
+}
+export const draftReasons: Record<string, string> = {
+  draft_write_disabled: "O ambiente está em leitura. O rascunho está disponível para consulta.",
+  inventory_visibility_unattested: "O AIRE precisa confirmar a cobertura existente antes de propor a criação.",
+  validated_draft_required: "O rascunho aguarda validação no Datadog.",
+  draft_inventory_conflict: "O AIRE identificou um monitor com possível sobreposição e precisa conferir o escopo.",
+  draft_evidence_stale: "Uma nova medição é necessária para propor a criação.",
+  draft_evaluation_superseded: "Consulte a avaliação mais recente desta jornada.",
+  connection_changed: "O AIRE precisa verificar a conexão atual da jornada.",
+};
 export function customerReport(
   evaluation: ReadinessEvaluation,
-  draftState?: { state: string; monitor_id: string | null } | null,
+  draftState?: { state: string; monitor_id: string | null; reason?: string | null } | null,
 ) {
   const { data } = evaluation;
   const counts = new Map<string, number>();
@@ -85,10 +97,6 @@ export function customerReport(
     lines.push(
       `Janela UTC: ${new Date(w.from * 1000).toISOString()} a ${new Date(w.to * 1000).toISOString()}.`,
     );
-  lines.push(
-    "",
-    `Achados por escopo: ${counts.get("adequate") ?? 0} adequados, ${counts.get("adjustment_recommended") ?? 0} com ajuste recomendado, ${counts.get("confirmed_gap") ?? 0} lacunas confirmadas e ${counts.get("unverified") ?? 0} por verificar.`,
-  );
   if (data.entry_monitoring) {
     const m = data.entry_monitoring;
     lines.push("", "## Proteção da entrada", "", ...observationText(m));
@@ -99,13 +107,15 @@ export function customerReport(
     if (m.monitor_draft)
       lines.push(
         "",
-        "Configuração proposta em rascunho",
+        draftDescription(m),
         "",
-        m.monitor_draft.configuration.query,
+        `Consulta da regra · \`${m.monitor_draft.configuration.query}\``,
         m.monitor_draft.validation === "validated"
           ? "Sintaxe validada pelo Datadog."
           : "Validação do Datadog pendente.",
       );
+    if (m.matching_monitor_ids?.length)
+      lines.push(`Monitores com a mesma condição · ${m.matching_monitor_ids.join(", ")}.`);
   }
   if (draftState) {
     const states: Record<string, string> = {
@@ -120,12 +130,20 @@ export function customerReport(
       "",
       `Estado do rascunho · ${states[draftState.state] ?? "pendente"}${draftState.monitor_id ? " · monitor " + draftState.monitor_id : ""}`,
     );
+    if (draftState.reason && draftReasons[draftState.reason])
+      lines.push(draftReasons[draftState.reason]);
   }
+  if (data.entry_monitoring?.inventory_full_visibility === false)
+    lines.push("", "A visibilidade do inventário é parcial. Cabe ao AIRE conferir a cobertura equivalente antes de criar outro monitor.");
+  lines.push(
+    "", "## Cobertura e investigações técnicas do AIRE", "",
+    `Achados por escopo: ${counts.get("adequate") ?? 0} adequados, ${counts.get("adjustment_recommended") ?? 0} com ajuste em análise, ${counts.get("confirmed_gap") ?? 0} lacunas confirmadas e ${counts.get("unverified") ?? 0} por verificar.`,
+  );
   for (const group of coverageGroups(data.customer_recommendations ?? [])) {
     const r = group[0];
     lines.push(
       "",
-      `## ${actions[r.action] || "Revisar"} · ${r.title}`,
+      `### ${actions[r.action] || "Revisar"} · ${r.title}`,
       "",
       ...new Set(group.map((row) => row.explanation)),
     );
