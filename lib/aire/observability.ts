@@ -244,12 +244,25 @@ export type CustomerRecommendation = {
   version: string;
   subject?: string;
   operation?: string;
-  monitor_ids?: number[];
+  monitor_ids?: (number | string)[];
+  conditional?: boolean;
+  scopes?: {
+    service?: string;
+    route?: string;
+    metric?: string;
+    signal?: string;
+  }[];
   evidence?: {
     metric?: string;
+    metric_context?: {
+      observed_min?: number;
+      observed_max?: number;
+      samples?: number;
+      unit?: ({ short_name?: string; name?: string } | null)[];
+    } | null;
     required_scope?: string[];
     monitor_checks?: {
-      monitor_id?: number;
+      monitor_id?: number | string;
       observed_thresholds?: { critical?: number; warning?: number };
       observed_unit?: string;
     }[];
@@ -276,7 +289,10 @@ export type ReadinessEvaluation = {
   created_at?: string;
   state: string;
   data: {
-    input: { mode: string };
+    input: { mode: string; environment?: string };
+    manifest?: { journey?: { name?: string } };
+    discovery?: { from?: number; to?: number };
+    manifest_revision?: string;
     operational_context?: {
       revision: number;
       catalog: import("./operational-catalog.ts").OperationalCatalog;

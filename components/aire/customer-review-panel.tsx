@@ -1,5 +1,11 @@
 "use client";
 import { useState } from "react";
+import { download } from "@/lib/aire/download";
+import {
+  customerReport,
+  scopeText,
+  seriesText,
+} from "@/lib/aire/customer-report";
 import type {
   CustomerDecision,
   CustomerRecommendation,
@@ -37,6 +43,18 @@ export function CustomerReviewPanel({
   return (
     <section aria-label="Recomendações para a jornada">
       <h3>Recomendações para a jornada</h3>
+      <button
+        type="button"
+        className="button secondary"
+        onClick={() =>
+          download(
+            `recomendacoes-${evaluation.id}.md`,
+            customerReport(evaluation),
+          )
+        }
+      >
+        Baixar documento
+      </button>
       <label>
         Mostrar{" "}
         <select
@@ -81,6 +99,21 @@ export function CustomerReviewPanel({
                       {c.observed_unit === "second" ? "s" : c.observed_unit}
                     </p>
                   ))}
+              </details>
+            )}
+            {(row.scopes?.length ?? 0) > 0 && (
+              <details>
+                <summary>Escopo e evidências</summary>
+                <ul>
+                  {[...new Set(row.scopes?.map(scopeText))].map((scope) => (
+                    <li key={scope}>{scope}</li>
+                  ))}
+                </ul>
+                {[
+                  ...new Set(row.evidence?.map(seriesText).filter(Boolean)),
+                ].map((t) => (
+                  <p key={t}>{t}</p>
+                ))}
               </details>
             )}
             {choice ? (

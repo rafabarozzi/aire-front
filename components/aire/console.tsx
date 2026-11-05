@@ -72,18 +72,8 @@ import { ReadinessPanel } from "./readiness-panel";
 import { normalizeRepository, journeyInputSchema } from "@/lib/aire/validation";
 import { ApiError, request } from "@/lib/aire/client";
 import { connectionRecovery } from "@/lib/aire/connection-recovery";
-export function download(
-  name: string,
-  contents: string,
-  type = "text/markdown",
-) {
-  const href = URL.createObjectURL(new Blob([contents], { type }));
-  const a = document.createElement("a");
-  a.href = href;
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(href), 1000);
-}
+import { download } from "@/lib/aire/download";
+export { download };
 const permissionLabels: Record<Permission, string> = {
   "readiness:configure": "Configurar políticas de observabilidade",
   "readiness:read": "Ver prontidão operacional",
