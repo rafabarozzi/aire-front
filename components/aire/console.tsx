@@ -900,7 +900,7 @@ export function Console() {
                                       </span>
                                     ))
                                   ) : (
-                                    <span className="muted">Em descoberta</span>
+                                    <span className="muted">{j.status === "COMPLETED" ? (j.stackEvidence === "verified" ? "Sem tecnologia identificada" : "Evidência indisponível") : j.status === "FAILED" ? "Análise interrompida" : "Em descoberta"}</span>
                                   )}
                                 </div>
                               </td>

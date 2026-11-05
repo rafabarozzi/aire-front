@@ -406,7 +406,7 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
               !caps?.realExecution && (
                 <p className="obs-notice">
                   É possível consultar a avaliação e revisar as recomendações. A
-                  aplicação de alterações no Datadog ainda aguarda habilitação.
+                  publicação de alertas ativos no Datadog aguarda habilitação.
                 </p>
               )}
             <strong>
@@ -454,36 +454,8 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
                 </button>
               )}
           </div>
-          {!!current.data.customer_recommendations?.length && (
-            <CustomerReviewPanel
-              key={current.id}
-              evaluation={current}
-              busy={busy}
-              canApprove={
-                permissions.includes("readiness:approve") &&
-                !isReadinessInProgress(current.state)
-              }
-              onDecide={(row, choice) =>
-                perform(async () => {
-                  try {
-                    await request(
-                      `${base}/evaluations/${current.id}/decision`,
-                      {
-                        method: "POST",
-                        body: JSON.stringify({
-                          id: row.id,
-                          fingerprint: row.version,
-                          revision: current.customer_review?.revision ?? 0,
-                          choice,
-                        }),
-                      },
-                    );
-                  } finally {
-                    await refresh();
-                  }
-                })
-              }
-            />
+          {(current.data.entry_monitoring || !!current.data.customer_recommendations?.length) && (
+            <CustomerReviewPanel key={current.id} evaluation={current} base={base + "/evaluations/" + current.id} permissions={permissions} />
           )}
           <details>
             <summary>

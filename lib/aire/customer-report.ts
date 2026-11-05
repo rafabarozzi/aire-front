@@ -1,5 +1,6 @@
 import type {
   CustomerRecommendation,
+  EntryMonitoring,
   ReadinessEvaluation,
 } from "./observability.ts";
 
@@ -20,13 +21,55 @@ export function seriesText(e: Evidence) {
     n.toLocaleString("pt-BR", { maximumSignificantDigits: 4 });
   return `${e.metric ?? "Série"} · ${c.samples} intervalos com dados · faixa observada ${fmt(c.observed_min)} a ${fmt(c.observed_max)} ${unit}`.trim();
 }
+// Group repeated calls to the same operation, but keep each version's evidence and history.
+export function coverageGroups(rows: CustomerRecommendation[]) {
+  const groups = new Map<string, CustomerRecommendation[]>();
+  for (const row of rows) {
+    const locations = [
+      ...new Set(
+        (row.scopes || []).map((s) => JSON.stringify([s.service, s.route])),
+      ),
+    ].sort();
+    const key =
+      row.action === "create" && locations.length
+        ? JSON.stringify(locations)
+        : row.id;
+    const group = groups.get(key) || [];
+    group.push(row);
+    groups.set(key, group);
+  }
+  return [...groups.values()];
+}
+
+export function observationText(m: EntryMonitoring) {
+  if (m.status !== "measured")
+    return [
+      m.status === "access_denied"
+        ? "A credencial do Datadog não permitiu consultar os resultados HTTP."
+        : "A medição da entrada aguarda uma série de requisições com rota, ambiente e códigos HTTP identificados.",
+    ];
+  const counts = Object.entries(m.counts || {});
+  const total = counts.reduce((n, [, v]) => n + v, 0);
+  const failures = counts
+    .filter(([code]) => code.startsWith("5"))
+    .reduce((n, [, v]) => n + v, 0);
+  return [
+    `${m.method} ${m.route} · ${total} respostas HTTP classificadas, ${failures} com erro de servidor (5xx).`,
+    counts.map(([code, n]) => `HTTP ${code} · ${n}`).join("  |  "),
+    `Nos intervalos de cinco minutos com tráfego, ${m.buckets_with_5xx} de ${m.buckets_with_traffic} tiveram erro. Houve ${m.buckets_without_traffic_witness} intervalos sem tráfego comprovado.`,
+  ];
+}
+
 const actions: Record<string, string> = {
   keep: "Manter",
-  adjust: "Ajustar",
-  create: "Propor criação",
-  investigate: "Verificar",
+  adjust: "Ajuste em análise",
+  create: "Cobertura a completar",
+  investigate: "Investigação do AIRE",
 };
-export function customerReport(evaluation: ReadinessEvaluation) {
+export function customerReport(
+  evaluation: ReadinessEvaluation,
+  draftState?: { state: string; monitor_id: string | null } | null,
+) {
   const { data } = evaluation;
   const counts = new Map<string, number>();
   for (const finding of data.findings)
@@ -46,27 +89,69 @@ export function customerReport(evaluation: ReadinessEvaluation) {
     "",
     `Achados por escopo: ${counts.get("adequate") ?? 0} adequados, ${counts.get("adjustment_recommended") ?? 0} com ajuste recomendado, ${counts.get("confirmed_gap") ?? 0} lacunas confirmadas e ${counts.get("unverified") ?? 0} por verificar.`,
   );
-  for (const r of data.customer_recommendations ?? []) {
+  if (data.entry_monitoring) {
+    const m = data.entry_monitoring;
+    lines.push("", "## Proteção da entrada", "", ...observationText(m));
+    if (m.from && m.to)
+      lines.push(
+        `Período medido UTC · ${new Date(m.from * 1000).toISOString()} a ${new Date(m.to * 1000).toISOString()}`,
+      );
+    if (m.monitor_draft)
+      lines.push(
+        "",
+        "Configuração proposta em rascunho",
+        "",
+        m.monitor_draft.configuration.query,
+        m.monitor_draft.validation === "validated"
+          ? "Sintaxe validada pelo Datadog."
+          : "Validação do Datadog pendente.",
+      );
+  }
+  if (draftState) {
+    const states: Record<string, string> = {
+      unavailable: "indisponível",
+      proposed: "preparado",
+      approved: "aprovado",
+      declined: "recusado",
+      submitting: "em conferência",
+      applied: "aplicado e confirmado no Datadog",
+    };
+    lines.push(
+      "",
+      `Estado do rascunho · ${states[draftState.state] ?? "pendente"}${draftState.monitor_id ? " · monitor " + draftState.monitor_id : ""}`,
+    );
+  }
+  for (const group of coverageGroups(data.customer_recommendations ?? [])) {
+    const r = group[0];
     lines.push(
       "",
       `## ${actions[r.action] || "Revisar"} · ${r.title}`,
       "",
-      r.explanation,
+      ...new Set(group.map((row) => row.explanation)),
     );
     if (r.monitor_ids?.length)
       lines.push("", `Monitores: ${r.monitor_ids.join(", ")}.`);
-    const scopes = [...new Set(r.scopes?.map(scopeText))];
+    const scopes = [
+      ...new Set(group.flatMap((row) => row.scopes?.map(scopeText) ?? [])),
+    ];
     if (scopes.length)
       lines.push("", "Escopos avaliados:", "", ...scopes.map((s) => `- ${s}`));
-    const evidence = [...new Set(r.evidence?.map(seriesText).filter(Boolean))];
+    const evidence = [
+      ...new Set(
+        group.flatMap(
+          (row) => row.evidence?.map(seriesText).filter(Boolean) ?? [],
+        ),
+      ),
+    ];
     if (evidence.length) lines.push("", ...evidence.map((t) => `- ${t}`));
-    const d = evaluation.customer_review?.decisions[r.id];
-    lines.push(
-      "",
-      d?.fingerprint === r.version
-        ? `Decisão: ${d.choice === "approved" ? "aprovada" : "recusada"} em ${d.at}.`
-        : "Decisão: aguardando revisão do cliente.",
-    );
+    for (const row of group) {
+      const d = evaluation.customer_review?.decisions[row.id];
+      if (d?.fingerprint === row.version)
+        lines.push(
+          "",
+          `Decisão: ${d.choice === "approved" ? "aprovada" : "recusada"} em ${d.at} (histórico).`,
+        );
+    }
   }
   return lines.join("\n");
 }

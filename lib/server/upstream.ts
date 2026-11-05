@@ -291,7 +291,7 @@ export async function engine(
       "X-AIRE-Tenant": tenant.id,
     },
     redirect: "error",
-    signal: AbortSignal.timeout(60000),
+    signal: init.signal ?? AbortSignal.timeout(60000),
     cache: "no-store",
   });
   if (!response.ok && !optionalStatuses.includes(response.status))

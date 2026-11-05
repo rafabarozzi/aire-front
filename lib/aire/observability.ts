@@ -153,6 +153,7 @@ export type Capabilities = {
     reason?: string | null;
   };
   realRead?: { ready: boolean; reason?: string | null };
+  entryDraftExecution?: boolean;
   realExecution?: boolean;
   realResponses?: boolean;
 };
@@ -272,6 +273,24 @@ export type CustomerRecommendation = {
   explanation: string;
   action: string;
 };
+export type EntryMonitoring = {
+  status: string;
+  from?: number;
+  to?: number;
+  method?: string;
+  route?: string;
+  counts?: Record<string, number>;
+  buckets_with_traffic?: number;
+  buckets_with_5xx?: number;
+  buckets_without_traffic_witness?: number;
+  query?: string;
+  matching_monitor_ids?: (number | string)[];
+  monitor_draft?: {
+    validation: string;
+    configuration: { name: string; query: string; draft_status: "draft"; options: Record<string, unknown> };
+  };
+};
+
 export type CustomerDecision = {
   choice: "approved" | "declined";
   fingerprint: string;
@@ -301,6 +320,7 @@ export type ReadinessEvaluation = {
     policy_context?: { revision: number; policy: ObservabilityPolicy };
     pause_reason?: string;
     read_only?: boolean;
+    entry_monitoring?: EntryMonitoring;
     customer_recommendations?: CustomerRecommendation[];
     recommendations: ReadinessRecommendation[];
     findings: {

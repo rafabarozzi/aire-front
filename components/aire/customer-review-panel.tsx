@@ -1,170 +1,162 @@
 "use client";
 import { useState } from "react";
+import { DraftDecision, type DraftStatus } from "./draft-decision";
 import { download } from "@/lib/aire/download";
 import {
+  coverageGroups,
   customerReport,
+  observationText,
   scopeText,
   seriesText,
 } from "@/lib/aire/customer-report";
-import type {
-  CustomerDecision,
-  CustomerRecommendation,
-  ReadinessEvaluation,
-} from "@/lib/aire/observability";
+import type { ReadinessEvaluation } from "@/lib/aire/observability";
+
+const sections = [
+  ["adjust", "Monitores existentes a ajustar"],
+  ["keep", "Cobertura existente"],
+  ["create", "Operações com cobertura a completar"],
+  ["investigate", "Verificações técnicas do AIRE"],
+] as const;
 
 export function CustomerReviewPanel({
   evaluation,
-  busy,
-  canApprove,
-  onDecide,
+  base,
+  permissions,
 }: {
   evaluation: ReadinessEvaluation;
-  busy: boolean;
-  canApprove: boolean;
-  onDecide: (
-    row: CustomerRecommendation,
-    choice: CustomerDecision["choice"],
-  ) => Promise<void>;
+  base: string;
+  permissions: string[];
 }) {
-  const [page, setPage] = useState(0);
+  const [draftState, setDraftState] = useState<DraftStatus | null>(null);
   const proposals = evaluation.data.customer_recommendations ?? [];
-  const [filter, setFilter] = useState("all");
-  const savedChoice = (row: CustomerRecommendation) => {
-    const saved = evaluation.customer_review?.decisions[row.id];
-    return saved?.fingerprint === row.version ? saved?.choice : undefined;
-  };
-  const remaining = proposals.filter((row) => !savedChoice(row)).length;
-  const rows =
-    filter === "pending"
-      ? proposals.filter((row) => !savedChoice(row))
-      : proposals;
-  const last = Math.max(0, Math.ceil(rows.length / 6) - 1);
-  const current = Math.min(page, last);
+  const entry = evaluation.data.entry_monitoring;
+  const draft = entry?.monitor_draft;
   return (
-    <section aria-label="Recomendações para a jornada">
-      <h3>Recomendações para a jornada</h3>
+    <section aria-label="Monitoramento da jornada" className="obs-panel">
+      <h3>Proteção da jornada</h3>
+      {entry && (
+        <article className="obs-rec">
+          <h4>Resultados na entrada</h4>
+          {observationText(entry).map((line) => (
+            <p key={line}>{line}</p>
+          ))}
+          {entry.from && entry.to && (
+            <small>
+              {new Date(entry.from * 1000).toLocaleString("pt-BR")} —{" "}
+              {new Date(entry.to * 1000).toLocaleString("pt-BR")}
+            </small>
+          )}
+          {entry.query && (
+            <details>
+              <summary>Consulta de medição</summary>
+              <pre>{entry.query}</pre>
+            </details>
+          )}
+          {!!entry.matching_monitor_ids?.length && (
+            <p>
+              Monitores com a mesma condição ·{" "}
+              {entry.matching_monitor_ids.join(", ")}
+            </p>
+          )}
+        </article>
+      )}
+      {draft && (
+        <article className="obs-rec">
+          <h4>Preparar a detecção de erros na entrada</h4>
+          <p>
+            Monitor em rascunho para detectar pelo menos uma resposta HTTP 5xx
+            em cinco minutos na rota {entry?.route}. A publicação do alerta e o
+            acionamento de equipes exigem uma decisão separada.
+          </p>
+          <p>
+            {draft.validation === "validated"
+              ? "Configuração validada pelo Datadog."
+              : "Configuração aguardando validação pelo Datadog."}
+          </p>
+          <details>
+            <summary>Configuração exata</summary>
+            <pre>{JSON.stringify(draft.configuration, null, 2)}</pre>
+          </details>
+          <DraftDecision
+            base={base}
+            permissions={permissions}
+            onStatus={setDraftState}
+          />
+        </article>
+      )}
+      {sections.map(([action, title]) => {
+        const groups = coverageGroups(
+          proposals.filter((row) => row.action === action),
+        );
+        if (!groups.length) return null;
+        return (
+          <details key={action}>
+            <summary>
+              {title} ({groups.length})
+            </summary>
+            {groups.map((group) => {
+              const row = group[0];
+              const scopes = [
+                ...new Set(
+                  group.flatMap((r) => r.scopes?.map(scopeText) ?? []),
+                ),
+              ];
+              const evidence = [
+                ...new Set(
+                  group.flatMap(
+                    (r) => r.evidence?.map(seriesText).filter(Boolean) ?? [],
+                  ),
+                ),
+              ];
+              return (
+                <article className="obs-rec" key={row.id}>
+                  <h4>{row.title}</h4>
+                  {[...new Set(group.map((r) => r.explanation))].map((t) => (
+                    <p key={t}>{t}</p>
+                  ))}
+                  {!!row.monitor_ids?.length && (
+                    <p>Monitores · {row.monitor_ids.join(", ")}</p>
+                  )}
+                  <details>
+                    <summary>Escopo e evidências</summary>
+                    <ul>
+                      {scopes.map((s) => (
+                        <li key={s}>{s}</li>
+                      ))}
+                    </ul>
+                    {evidence.map((s) => (
+                      <p key={s}>{s}</p>
+                    ))}
+                  </details>
+                  {group.map((r) => {
+                    const d = evaluation.customer_review?.decisions[r.id];
+                    return (
+                      d?.fingerprint === r.version && (
+                        <p key={r.id}>
+                          Decisão histórica ·{" "}
+                          {d.choice === "approved" ? "aprovada" : "recusada"}
+                        </p>
+                      )
+                    );
+                  })}
+                </article>
+              );
+            })}
+          </details>
+        );
+      })}
       <button
         type="button"
         className="button secondary"
         onClick={() =>
           download(
             `recomendacoes-${evaluation.id}.md`,
-            customerReport(evaluation),
+            customerReport(evaluation, draftState),
           )
         }
       >
         Baixar documento
       </button>
-      <label>
-        Mostrar{" "}
-        <select
-          value={filter}
-          onChange={(e) => {
-            setPage(0);
-            setFilter(e.target.value);
-          }}
-        >
-          <option value="all">Todas ({proposals.length})</option>
-          <option value="pending">Aguardando decisão ({remaining})</option>
-        </select>
-      </label>
-      {rows.slice(current * 6, current * 6 + 6).map((row) => {
-        const choice = savedChoice(row);
-        const scope = row.evidence?.[0]?.required_scope ?? [];
-        const service = scope.find((t) => t.startsWith("service:"))?.slice(8);
-        const resource = scope
-          .find((t) => t.startsWith("resource_name:"))
-          ?.slice(14);
-        const checks =
-          row.evidence?.flatMap((e) => e.monitor_checks ?? []) ?? [];
-        return (
-          <article className="obs-rec" key={row.id}>
-            <h4>{row.title}</h4>
-            {service && (
-              <p>{[service, resource].filter(Boolean).join(" · ")}</p>
-            )}
-            <p>{row.explanation}</p>
-            {!!row.monitor_ids?.length && (
-              <p>Monitores: {row.monitor_ids.join(", ")}</p>
-            )}
-            {checks.some((c) => c.observed_thresholds?.critical != null) && (
-              <details>
-                <summary>Limiares observados</summary>
-                {checks
-                  .filter((c) => c.observed_thresholds?.critical != null)
-                  .map((c, i) => (
-                    <p key={i}>
-                      Monitor {c.monitor_id} · crítico{" "}
-                      {c.observed_thresholds?.critical}{" "}
-                      {c.observed_unit === "second" ? "s" : c.observed_unit}
-                    </p>
-                  ))}
-              </details>
-            )}
-            {(row.scopes?.length ?? 0) > 0 && (
-              <details>
-                <summary>Escopo e evidências</summary>
-                <ul>
-                  {[...new Set(row.scopes?.map(scopeText))].map((scope) => (
-                    <li key={scope}>{scope}</li>
-                  ))}
-                </ul>
-                {[
-                  ...new Set(row.evidence?.map(seriesText).filter(Boolean)),
-                ].map((t) => (
-                  <p key={t}>{t}</p>
-                ))}
-              </details>
-            )}
-            {choice ? (
-              <strong>{choice === "approved" ? "Aprovada" : "Recusada"}</strong>
-            ) : (
-              <div className="obs-actions">
-                <button
-                  type="button"
-                  className="button"
-                  disabled={busy || !canApprove}
-                  onClick={() => onDecide(row, "approved")}
-                >
-                  Aprovar
-                </button>
-                <button
-                  type="button"
-                  className="button secondary"
-                  disabled={busy || !canApprove}
-                  onClick={() => onDecide(row, "declined")}
-                >
-                  Recusar
-                </button>
-              </div>
-            )}
-          </article>
-        );
-      })}
-      {!rows.length && <p>Todas as recomendações foram revisadas.</p>}
-      {last > 0 && (
-        <nav className="obs-actions" aria-label="Páginas das recomendações">
-          <button
-            type="button"
-            className="button secondary"
-            disabled={!current}
-            onClick={() => setPage(current - 1)}
-          >
-            Anterior
-          </button>
-          <span>
-            {current + 1} de {last + 1}
-          </span>
-          <button
-            type="button"
-            className="button secondary"
-            disabled={current === last}
-            onClick={() => setPage(current + 1)}
-          >
-            Próxima
-          </button>
-        </nav>
-      )}
     </section>
   );
 }

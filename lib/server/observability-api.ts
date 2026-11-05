@@ -5,7 +5,6 @@ import {
 } from "../aire/operational-catalog.ts";
 import {
   readCustomerReview,
-  saveCustomerDecision,
   readOperationalCatalog,
   saveOperationalCatalog,
 } from "./observability-store.ts";
@@ -48,6 +47,7 @@ const capSchema = z.object({
   realRead: z
     .object({ ready: z.boolean(), reason: z.string().nullable().optional() })
     .optional(),
+  entryDraftExecution: z.boolean().optional(),
   realExecution: z.boolean().default(false),
   realResponses: z.boolean().default(false),
 });
@@ -129,7 +129,10 @@ export async function observabilityApi(
   body: () => Promise<unknown>,
 ) {
   const method = request.method;
+  const draftAction = path[5] === "entry-draft" ? path[6] : undefined;
   const permission =
+    draftAction === "apply" && method === "POST" ? "readiness:execute" :
+    draftAction && method === "POST" ? "readiness:approve" :
     method === "GET"
       ? path[1] === "environments"
         ? "readiness:evaluate"
@@ -290,6 +293,22 @@ export async function observabilityApi(
       );
     }
   }
+  if (path[3] === "evaluations" && path[5] === "entry-draft" &&
+      z.string().uuid().safeParse(path[4]).success) {
+    const endpoint = `/v1/readiness/${path[4]}/entry-draft`;
+    if (method === "GET" && path.length === 6) {
+      const response = await engine(c.tenant, endpoint + "?analysis_id=" + j.id, { headers });
+      return response.json();
+    }
+    if (method !== "POST" || path.length !== 7 || !["approve", "decline", "apply"].includes(draftAction || ""))
+      throw new AppError(404, "not_found", "Ação não encontrada.");
+    const b = checked(z.object({revision:z.string().regex(/^[a-f0-9]{64}$/)}).strict(),await body());
+    const response = await engine(c.tenant, endpoint + "/" + draftAction,
+      {method, headers, body: JSON.stringify({...b, analysis_id:j.id})}, [403,404,409]);
+    if (!response.ok) throw new AppError(response.status, "draft_unavailable",
+      "A ação está indisponível para esta versão. Atualize a avaliação e confira a condição exibida.");
+    return response.json();
+  }
   if (path[3] !== "evaluations" || path.length > 6)
     throw new AppError(404, "not_found", "Recurso não encontrado.");
 
@@ -319,38 +338,7 @@ export async function observabilityApi(
     return Promise.all(list.map((row) => withCustomerReview(c.tenant.id, row)));
   }
   if (method === "POST" && action === "decision" && evaluation) {
-    const b = checked(
-      z
-        .object({
-          id: z.string().min(1).max(160),
-          fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
-          choice: z.enum(["approved", "declined"]),
-          revision: z.number().int().nonnegative(),
-        })
-        .strict(),
-      await body(),
-    );
-    const versions = recommendationVersions(evaluation);
-    if (
-      !evaluation.data.read_only ||
-      !Object.hasOwn(versions, b.id) ||
-      versions[b.id] !== b.fingerprint ||
-      ["QUEUED", "INVESTIGATING"].includes(evaluation.state)
-    )
-      throw new AppError(
-        409,
-        "recommendation_changed",
-        "Atualize a avaliação antes de decidir.",
-      );
-    return saveCustomerDecision(
-      c.tenant.id,
-      evaluation.id,
-      b.id,
-      b.choice,
-      b.fingerprint,
-      b.revision,
-      c.identity.sub,
-    );
+    throw new AppError(409, "advisory_only", "Esta observação técnica não autoriza uma alteração no provedor.");
   }
   if (method === "GET" && action === "report" && evaluation) {
     let markdown = await (
@@ -365,7 +353,7 @@ export async function observabilityApi(
         const disposition =
           saved?.fingerprint === versions[row.id]
             ? `${saved.choice === "approved" ? "Aprovada" : "Recusada"} (${saved.at})`
-            : "Aguardando revisão";
+            : "Evidência técnica";
         markdown += `\n- ${row.title} — ${disposition}`;
       }
     }
