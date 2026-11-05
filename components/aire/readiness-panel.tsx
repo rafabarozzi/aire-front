@@ -410,8 +410,7 @@ export function ReadinessPanel({
                       timeZone: "UTC",
                       timeZoneName: "short",
                     })
-                  : h.id}{" "}
-                · {evaluationLabel(h.state)}
+                  : h.id}
               </option>
             ))}
           </select>
