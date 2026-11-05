@@ -40,7 +40,7 @@ export function ObservabilityHub({
     try {
       setData(
         await request<Result>(
-          `observability/journeys?page=${page}&q=${encodeURIComponent(search)}`,
+          `observability/journeys?view=summary&page=${page}&q=${encodeURIComponent(search)}`,
         ),
       );
     } catch (e) {

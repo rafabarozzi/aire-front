@@ -234,7 +234,7 @@ export async function observabilityApi(
         if (version.status !== "COMPLETED") continue;
         try {
           const found = await (
-            await engine(c.tenant, `/v1/readiness/analyses/${version.id}`, {
+            await engine(c.tenant, `/v1/readiness/analyses/${version.id}${u.searchParams.get("view") === "summary" ? "?view=summary" : ""}`, {
               headers,
             })
           ).json();
@@ -312,8 +312,9 @@ export async function observabilityApi(
   }
   if (method === "GET" && !action) {
     if (evaluation) return withCustomerReview(c.tenant.id, evaluation);
+    const panel = new URL(request.url).searchParams.get("view") === "panel";
     const list: ReadinessEvaluation[] = await (
-      await engine(c.tenant, base, { headers })
+      await engine(c.tenant, panel ? base + "?view=panel" : base, { headers })
     ).json();
     return Promise.all(list.map((row) => withCustomerReview(c.tenant.id, row)));
   }

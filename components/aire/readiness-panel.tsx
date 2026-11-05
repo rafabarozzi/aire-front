@@ -53,7 +53,7 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
   );
   const [bulk, setBulk] = useState<ResponseSelection>(emptyResponseSelection());
   const refresh = useCallback(async () => {
-    setHistory(await request<ReadinessEvaluation[]>(base + "/evaluations"));
+    setHistory(await request<ReadinessEvaluation[]>(base + "/evaluations?view=panel"));
   }, [base]);
   useEffect(() => {
     let live = true;
