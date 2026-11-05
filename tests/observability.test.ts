@@ -806,3 +806,64 @@ test("real evaluation cannot execute when realExecution is false", async () => {
   assert.equal(response.status, 409);
   assert.equal(writes, 0);
 });
+
+test("customer decision binds the tenant, evaluation and recommendation snapshot without executing changes", async () => {
+  await saveJourney("alpha", journey);
+  const proposal = {
+    id: "latency",
+    version: "a".repeat(64),
+    title: "Revisar latência",
+    explanation: "O alerta agrega rotas diferentes.",
+    action: "adjust",
+  };
+  const path = `observability/journeys/${id}/evaluations/${evaluationId}`;
+  const row = {
+    id: evaluationId,
+    analysis: id,
+    state: "AWAITING_CONTINUATION",
+    data: { read_only: true, customer_recommendations: [proposal] },
+  };
+  globalThis.fetch = async (_url, init) => {
+    assert.equal(init?.method || "GET", "GET");
+    return Response.json(row);
+  };
+  const view = (await (await call(path)).json()) as typeof row;
+  const b = {
+    id: proposal.id,
+    choice: "declined",
+    fingerprint: view.data.customer_recommendations[0].version,
+    revision: 0,
+  };
+  assert.equal((await call(path + "/decision", "POST", b)).status, 200);
+  const { customer_review: saved } = (await (await call(path)).json()) as {
+    customer_review: import("../lib/aire/observability.ts").CustomerReview;
+  };
+  assert.equal(saved.decisions.latency.choice, "declined");
+  assert.equal(saved.decisions.latency.actor, "alice");
+  assert.equal(
+    (await call(path + "/decision", "POST", { ...b, choice: "approved" }))
+      .status,
+    409,
+  );
+  assert.equal((await call(path + "/decision", "POST", b, "bob")).status, 404);
+  assert.equal(
+    (
+      await call(path + "/decision", "POST", {
+        ...b,
+        choice: "approved",
+        revision: 1,
+      })
+    ).status,
+    200,
+  );
+  const approved = (await (await call(path)).json()) as {
+    customer_review: import("../lib/aire/observability.ts").CustomerReview;
+  };
+  assert.equal(approved.customer_review.decisions.latency.choice, "approved");
+  proposal.explanation = "A evidência foi revisada.";
+  proposal.version = "b".repeat(64);
+  assert.equal(
+    (await call(path + "/decision", "POST", { ...b, revision: 1 })).status,
+    409,
+  );
+});

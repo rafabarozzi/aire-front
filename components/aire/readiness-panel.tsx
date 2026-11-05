@@ -17,6 +17,7 @@ import {
   type CatalogRecord,
   type ResponseSelection,
 } from "@/lib/aire/operational-catalog";
+import { CustomerReviewPanel } from "./customer-review-panel";
 import "./observability.css";
 type Settings = NonNullable<ReadinessRecommendation["monitor_settings"]>;
 type Preferences = {
@@ -453,6 +454,37 @@ export function ReadinessPanel({ analysisId }: { analysisId: string }) {
                 </button>
               )}
           </div>
+          {!!current.data.customer_recommendations?.length && (
+            <CustomerReviewPanel
+              key={current.id}
+              evaluation={current}
+              busy={busy}
+              canApprove={
+                permissions.includes("readiness:approve") &&
+                !isReadinessInProgress(current.state)
+              }
+              onDecide={(row, choice) =>
+                perform(async () => {
+                  try {
+                    await request(
+                      `${base}/evaluations/${current.id}/decision`,
+                      {
+                        method: "POST",
+                        body: JSON.stringify({
+                          id: row.id,
+                          fingerprint: row.version,
+                          revision: current.customer_review?.revision ?? 0,
+                          choice,
+                        }),
+                      },
+                    );
+                  } finally {
+                    await refresh();
+                  }
+                })
+              }
+            />
+          )}
           <details>
             <summary>
               Cobertura e evidências ({current.data.findings.length})

@@ -4,6 +4,8 @@ import {
   responseContext,
 } from "../aire/operational-catalog.ts";
 import {
+  readCustomerReview,
+  saveCustomerDecision,
   readOperationalCatalog,
   saveOperationalCatalog,
 } from "./observability-store.ts";
@@ -103,6 +105,24 @@ function checked<S extends z.ZodTypeAny>(schema: S, raw: unknown): z.output<S> {
     );
   return r.data;
 }
+function recommendationVersions(evaluation: ReadinessEvaluation) {
+  return Object.fromEntries(
+    (evaluation.data.customer_recommendations || []).map((row) => [
+      row.id,
+      row.version,
+    ]),
+  );
+}
+async function withCustomerReview(
+  tenant: string,
+  evaluation: ReadinessEvaluation,
+) {
+  if (!evaluation.data?.customer_recommendations?.length) return evaluation;
+  return {
+    ...evaluation,
+    customer_review: await readCustomerReview(tenant, evaluation.id),
+  };
+}
 export async function observabilityApi(
   request: Request,
   path: string[],
@@ -116,7 +136,7 @@ export async function observabilityApi(
         : "readiness:read"
       : ["policy", "catalog"].includes(path[1])
         ? "readiness:configure"
-        : path[3] === "preferences" || path[5] === "accept"
+        : path[3] === "preferences" || ["accept", "decision"].includes(path[5])
           ? "readiness:approve"
           : path[5] === "execute"
             ? "readiness:execute"
@@ -290,16 +310,66 @@ export async function observabilityApi(
         "Avaliação não encontrada nesta jornada.",
       );
   }
-  if (method === "GET" && !action)
-    return (
-      evaluation ?? (await (await engine(c.tenant, base, { headers })).json())
+  if (method === "GET" && !action) {
+    if (evaluation) return withCustomerReview(c.tenant.id, evaluation);
+    const list: ReadinessEvaluation[] = await (
+      await engine(c.tenant, base, { headers })
+    ).json();
+    return Promise.all(list.map((row) => withCustomerReview(c.tenant.id, row)));
+  }
+  if (method === "POST" && action === "decision" && evaluation) {
+    const b = checked(
+      z
+        .object({
+          id: z.string().min(1).max(160),
+          fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+          choice: z.enum(["approved", "declined"]),
+          revision: z.number().int().nonnegative(),
+        })
+        .strict(),
+      await body(),
     );
-  if (method === "GET" && action === "report")
-    return {
-      markdown: await (
-        await engine(c.tenant, base + "/report", { headers })
-      ).text(),
-    };
+    const versions = recommendationVersions(evaluation);
+    if (
+      !evaluation.data.read_only ||
+      !Object.hasOwn(versions, b.id) ||
+      versions[b.id] !== b.fingerprint ||
+      ["QUEUED", "INVESTIGATING"].includes(evaluation.state)
+    )
+      throw new AppError(
+        409,
+        "recommendation_changed",
+        "Atualize a avaliação antes de decidir.",
+      );
+    return saveCustomerDecision(
+      c.tenant.id,
+      evaluation.id,
+      b.id,
+      b.choice,
+      b.fingerprint,
+      b.revision,
+      c.identity.sub,
+    );
+  }
+  if (method === "GET" && action === "report" && evaluation) {
+    let markdown = await (
+      await engine(c.tenant, base + "/report", { headers })
+    ).text();
+    if (evaluation.data.customer_recommendations?.length) {
+      const review = await readCustomerReview(c.tenant.id, evaluation.id);
+      const versions = recommendationVersions(evaluation);
+      markdown += "\n\n### Decisões do cliente\n";
+      for (const row of evaluation.data.customer_recommendations) {
+        const saved = review.decisions[row.id];
+        const disposition =
+          saved?.fingerprint === versions[row.id]
+            ? `${saved.choice === "approved" ? "Aprovada" : "Recusada"} (${saved.at})`
+            : "Aguardando revisão";
+        markdown += `\n- ${row.title} — ${disposition}`;
+      }
+    }
+    return { markdown };
+  }
   if (
     method !== "POST" ||
     (evaluationId && !["accept", "execute", "resume"].includes(action))

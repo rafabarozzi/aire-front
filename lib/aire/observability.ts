@@ -240,7 +240,37 @@ export function validateTags(
   ];
   return required.filter((k) => !values[k]?.trim());
 }
+export type CustomerRecommendation = {
+  version: string;
+  subject?: string;
+  operation?: string;
+  monitor_ids?: number[];
+  evidence?: {
+    metric?: string;
+    required_scope?: string[];
+    monitor_checks?: {
+      monitor_id?: number;
+      observed_thresholds?: { critical?: number; warning?: number };
+      observed_unit?: string;
+    }[];
+  }[];
+  id: string;
+  title: string;
+  explanation: string;
+  action: string;
+};
+export type CustomerDecision = {
+  choice: "approved" | "declined";
+  fingerprint: string;
+  actor: string;
+  at: string;
+};
+export type CustomerReview = {
+  revision: number;
+  decisions: Record<string, CustomerDecision>;
+};
 export type ReadinessEvaluation = {
+  customer_review?: CustomerReview;
   id: string;
   analysis?: string;
   created_at?: string;
@@ -255,6 +285,7 @@ export type ReadinessEvaluation = {
     policy_context?: { revision: number; policy: ObservabilityPolicy };
     pause_reason?: string;
     read_only?: boolean;
+    customer_recommendations?: CustomerRecommendation[];
     recommendations: ReadinessRecommendation[];
     findings: {
       service?: string;
