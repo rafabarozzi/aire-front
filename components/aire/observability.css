@@ -302,3 +302,14 @@
     grid-template-columns: 1fr;
   }
 }
+.obs-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+.obs-rec details {
+  margin: 8px 0;
+  overflow-wrap: anywhere;
+}
