@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { planAction } from "@/lib/aire/customer-report";
 import { request } from "@/lib/aire/client";
 import type {
   ReadinessEvaluation,
@@ -53,7 +54,7 @@ export function MonitoringPlan({
         <p>
           Revise cada mudança para a jornada{" "}
           {evaluation.data.manifest?.journey?.name}. A aprovação registra sua
-          decisão no AIRE. A aplicação no Datadog é uma etapa separada.
+          decisão no AIRE. A aplicação destas propostas no Datadog está desabilitada.
         </p>
       </header>
       {plan.proposals.map((p) => {
@@ -63,10 +64,11 @@ export function MonitoringPlan({
           <article key={p.id} className={styles.planCard}>
             <div className={styles.planMeta}>
               <b>
-                {p.action === "create" ? "Criar monitor" : "Ajustar monitor"}{" "}
+                {planAction(p)}{" "}
                 {p.monitor_id && `#${p.monitor_id}`}
               </b>
               <span>Prioridade {p.severity}</span>
+              <small title={p.version}>Versão {p.version.slice(0,8)}</small>
             </div>
             <h4>{p.title}</h4>
             <p>
@@ -78,10 +80,11 @@ export function MonitoringPlan({
               </p>
             )}
             <p>{p.validation}</p>
+            <p><strong>Antes de aplicar</strong> · {p.safeguards}</p>
             <details>
               <summary>Justificativa e configuração</summary>
               <p>{p.reason}</p>
-              <p>{p.safeguards}</p>
+
               <p>
                 Política de severidade · {plan.tier} / {p.role} / {p.signal}
               </p>

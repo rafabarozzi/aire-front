@@ -2,6 +2,7 @@ import type {
   CustomerRecommendation,
   EntryMonitoring,
   ReadinessEvaluation,
+  PlanProposal,
 } from "./observability.ts";
 
 type Scope = NonNullable<CustomerRecommendation["scopes"]>[number];
@@ -82,6 +83,12 @@ export const draftReasons: Record<string, string> = {
     "Consulte a avaliação mais recente desta jornada.",
   connection_changed: "O AIRE precisa verificar a conexão atual da jornada.",
 };
+export function planAction(p: PlanProposal) {
+  if (p.action === "adjust") return "Ajustar monitor";
+  if (p.configuration.instrumentation) return "Instrumentar e criar monitor";
+  if (p.configuration.type === "Datadog Synthetics API") return "Criar teste externo";
+  return "Criar monitor";
+}
 export function customerReport(
   evaluation: ReadinessEvaluation,
   draftState?: {
@@ -132,9 +139,10 @@ export function customerReport(
     for (const p of data.monitor_plan.proposals) {
       const d = evaluation.plan_decisions?.[p.id];
       lines.push(
-        `### ${p.action === "adjust" ? "Ajustar" : "Criar"} · ${p.title} · ${p.severity}`,
+        `### ${planAction(p)} · ${p.title} · ${p.severity}`,
         "",
         p.monitor_id ? `Monitor Datadog #${p.monitor_id}` : "Novo monitor",
+        `Versão da proposta · ${p.version}`,
         p.trigger,
         p.before || "",
         p.reason,
