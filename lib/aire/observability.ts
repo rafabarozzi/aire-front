@@ -308,6 +308,18 @@ export type PlanProposal = {
   signal: string; role: string; severity: string; reason: string; safeguards: string;
   validation: string; configuration: Record<string, unknown>; monitor_id?: number; before?: string;
   calibration?: ThresholdCalibration;
+  benefit?: string;
+  application_status?: string;
+  setup?: { steps: string[]; cadence_seconds: number; completion_deadline_seconds: number; contract_revision: string; evidence_bundle: string; collector: Record<string, unknown> };
+  proof?: { cases?: string[]; controls?: Record<string, {observations: number; failed: number; unknown: number}>; provider?: string };
+};
+export type MonitoringExperiments = {
+  status: string; testing_environment?: string; target_environment?: string; target_validation?: string;
+  model_revision?: string; bundle_hash?: string; training?: number; holdout?: number; constraints?: number;
+  limitation?: string; reason?: string;
+  recurrence?: {status: string; threshold?: number; cadence_seconds?: number; maturity_seconds?: number; controls?: Record<string, {observations: number; failed: number; unknown: number}>};
+  cases?: {id: string; title: string; scenario: string; transactions: number; detected_transactions: number; unknown_transactions: number; fault_materialized: boolean; independent_outcome_broken: boolean; condition_met?: boolean}[];
+  provider_evidence?: {metric: string; environment?: string; status: string}[];
 };
 export type ThresholdCalibration = {
   status: "validated" | "rejected" | "insufficient_evidence";
@@ -346,7 +358,7 @@ export type ReadinessEvaluation = {
     pause_reason?: string;
     read_only?: boolean;
     entry_monitoring?: EntryMonitoring;
-    monitor_plan?: {proposals: PlanProposal[]; gaps: string[]; tier: string; coverage?: MonitoringCoverage};
+    monitor_plan?: {proposals: PlanProposal[]; gaps: string[]; tier: string; coverage?: MonitoringCoverage; experiments?: MonitoringExperiments};
     customer_recommendations?: CustomerRecommendation[];
     recommendations: ReadinessRecommendation[];
     findings: {

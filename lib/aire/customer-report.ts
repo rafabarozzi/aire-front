@@ -138,6 +138,17 @@ export function customerReport(
   }
   if (data.monitor_plan) {
     lines.push("", "## Plano de monitoramento", "");
+    const experiments = data.monitor_plan.experiments;
+    if (experiments?.cases?.length) {
+      const affected = experiments.cases.filter(c => c.fault_materialized && c.independent_outcome_broken);
+      lines.push("### Evidência dos ensaios", "",
+        `${affected.filter(c => c.condition_met).length} de ${affected.length} cenários com impacto comprovado atingiram a condição de disparo.`,
+        `Ambiente ensaiado: ${experiments.testing_environment}. Destino das propostas: ${experiments.target_environment}; validação no destino incluída no plano de aplicação.`,
+        `${experiments.training} execuções de treinamento; ${experiments.holdout} controles reservados.`,
+        "| Ensaio | Execuções | Divergências detectadas | Condição de disparo |", "| --- | ---: | ---: | --- |");
+      for (const c of experiments.cases) lines.push(`| ${c.title.replaceAll("|", "\\|").replaceAll("\n", " ")} | ${c.transactions} | ${c.detected_transactions} | ${c.condition_met ? "Atingida" : "Não comprovada"} |`);
+      lines.push(experiments.limitation || "", "");
+    }
     const coverage = data.monitor_plan.coverage;
     if (coverage) {
       lines.push("Cobertura ainda em validação.",
@@ -157,6 +168,7 @@ export function customerReport(
         p.monitor_id ? `Monitor Datadog #${p.monitor_id}` : "Novo monitor",
         `Versão da proposta · ${p.version}`,
         p.trigger,
+        p.benefit || "",
         p.before || "",
         p.reason,
         p.safeguards,
@@ -170,6 +182,7 @@ export function customerReport(
         "```",
         "",
       );
+      if (p.setup) lines.push("Implementação incluída:", ...p.setup.steps.map(s => `- ${s}`), "");
     }
     lines.push(...data.monitor_plan.gaps);
   }

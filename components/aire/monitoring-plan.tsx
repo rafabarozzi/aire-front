@@ -8,6 +8,7 @@ import type {
   PlanProposal,
 } from "@/lib/aire/observability";
 import styles from "./customer-review.module.css";
+import { MonitoringExperimentsPanel } from "./monitoring-experiments";
 
 export function MonitoringPlan({
   evaluation,
@@ -57,6 +58,7 @@ export function MonitoringPlan({
           decisão no AIRE. A aplicação destas propostas no Datadog está desabilitada.
         </p>
       </header>
+      {plan.experiments?.cases?.length ? <MonitoringExperimentsPanel evidence={plan.experiments} /> : null}
       {plan.coverage && (
         <aside className={styles.planCard} aria-label="Validação da cobertura">
           <h4>Validação da cobertura da jornada</h4>
@@ -98,6 +100,7 @@ export function MonitoringPlan({
               <small title={p.version}>Versão {p.version.slice(0,8)}</small>
             </div>
             <h4>{p.title}</h4>
+            {p.benefit && <p>{p.benefit}</p>}
             <p>
               <strong>Dispara quando</strong> · {p.trigger}
             </p>
@@ -108,6 +111,12 @@ export function MonitoringPlan({
             )}
             <p>{p.validation}</p>
             <p><strong>Antes de aplicar</strong> · {p.safeguards}</p>
+            {p.setup && <details>
+              <summary>Implementação incluída nesta proposta</summary>
+              <ol>{p.setup.steps.map(step => <li key={step}>{step}</li>)}</ol>
+              <p>Cadência prevista: uma execução a cada {p.setup.cadence_seconds} s. Prazo de conclusão observado: {p.setup.completion_deadline_seconds} s.</p>
+              <p>A aprovação abrange este plano. A ativação depende dos controles do ambiente e da habilitação de escrita.</p>
+            </details>}
             <details>
               <summary>Justificativa e configuração</summary>
               <p>{p.reason}</p>
