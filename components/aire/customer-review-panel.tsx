@@ -73,13 +73,13 @@ export function CustomerReviewPanel({
             <div className={styles.proposalLabel}>Monitor proposto</div>
             <h3>Detectar erros de servidor na entrada</h3>
             <p>
-              Detectar pelo menos <b>1 resposta HTTP 5xx em 5 minutos</b> na
-              rota{" "}
+              Detectar erros HTTP 5xx na condição registrada para a rota{" "}
               <code>
                 {entry.method} {entry.route}
               </code>
               .
             </p>
+            <code>{draft.configuration.query}</code>
             <div className={styles.validation}>
               {draft.validation === "validated" ? (
                 <BadgeCheck size={16} aria-hidden />

@@ -306,6 +306,21 @@ export type PlanProposal = {
   id: string; version: string; action: "create" | "adjust"; title: string; trigger: string;
   signal: string; role: string; severity: string; reason: string; safeguards: string;
   validation: string; configuration: Record<string, unknown>; monitor_id?: number; before?: string;
+  calibration?: ThresholdCalibration;
+};
+export type ThresholdCalibration = {
+  status: "validated" | "rejected" | "insufficient_evidence";
+  reason: string; threshold?: number; unit?: string; window_seconds?: number;
+  false_positive_windows?: number[];
+  missed_incident_windows?: {at: number; scenario: string}[];
+  samples?: Record<string, number>;
+};
+export type MonitoringCoverage = {
+  version: number; status: string; limitation: string;
+  summary: {identified: number; validated_in_replay: number; investigating: number};
+  calibration: {status?: string; reason?: string; signals?: Record<string, ThresholdCalibration>};
+  requirements: {id: string; kind: string; subject: string; title: string; reason: string;
+    status: string; proposal_ids: string[]; evidence_refs: string[]; acceptance?: string}[];
 };
 export type PlanDecisions = Record<string,{ version: string; choice: "approved" | "declined"; decided_at: string }>;
 export type ReadinessEvaluation = {
@@ -330,7 +345,7 @@ export type ReadinessEvaluation = {
     pause_reason?: string;
     read_only?: boolean;
     entry_monitoring?: EntryMonitoring;
-    monitor_plan?: {proposals: PlanProposal[]; gaps: string[]; tier: string};
+    monitor_plan?: {proposals: PlanProposal[]; gaps: string[]; tier: string; coverage?: MonitoringCoverage};
     customer_recommendations?: CustomerRecommendation[];
     recommendations: ReadinessRecommendation[];
     findings: {

@@ -57,6 +57,33 @@ export function MonitoringPlan({
           decisão no AIRE. A aplicação destas propostas no Datadog está desabilitada.
         </p>
       </header>
+      {plan.coverage && (
+        <aside className={styles.planCard} aria-label="Validação da cobertura">
+          <h4>Validação da cobertura da jornada</h4>
+          <p>
+            {plan.coverage.summary.identified} necessidades de detecção inferidas do manifesto. {" "}
+            {plan.coverage.summary.validated_in_replay} com condição satisfeita em replay no Lab; {" "}
+            {plan.coverage.summary.investigating} ainda sem detecção comprovada.
+          </p>
+          <p>A jornada ainda não tem cobertura completa demonstrada. As pendências de investigação ficam com o AIRE; somente mudanças com evidência de detecção aparecem para decisão.</p>
+          <p>{plan.coverage.calibration.reason}</p>
+          {Object.entries(plan.coverage.calibration.signals || {}).map(([signal, fit]) => (
+            <p key={signal}>
+              <strong>{signal === "errors" ? "Erros técnicos" : "Latência"}</strong> · {fit.status === "validated" ? "Condição satisfeita em replay no Lab" : fit.status === "rejected" ? "Limite reprovado no teste" : "Baseline e testes ainda insuficientes"}.
+              {fit.status !== "insufficient_evidence" && ` ${fit.false_positive_windows?.length || 0} janelas de controle que cruzaram o limite; ${fit.missed_incident_windows?.length || 0} janelas de incidente que não cruzaram o limite.`}
+            </p>
+          ))}
+          <details>
+            <summary>O que falta demonstrar</summary>
+            {plan.coverage.requirements.filter(r => r.status === "investigating").map(r => (
+              <div key={r.id}><h5>{r.title}</h5><p>{r.reason}</p>
+                {r.acceptance && <p><strong>Para comprovar a detecção</strong> · {r.acceptance}</p>}
+              </div>
+            ))}
+            <p>{plan.coverage.limitation}</p>
+          </details>
+        </aside>
+      )}
       {plan.proposals.map((p) => {
         const saved = decisions[p.id];
         const decided = saved?.version === p.version;

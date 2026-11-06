@@ -68,7 +68,7 @@ const actions: Record<string, string> = {
   investigate: "Investigação do AIRE",
 };
 export function draftDescription(m: EntryMonitoring) {
-  return `Preparar um monitor que sinalize pelo menos uma resposta HTTP 5xx em cinco minutos na rota ${m.method} ${m.route}. O rascunho permite revisar a regra no Datadog. A publicação para alertar a equipe exige uma decisão separada.`;
+  return `Preparar um monitor de erros HTTP 5xx para a rota ${m.method} ${m.route}, com o limite da configuração abaixo. O rascunho permite revisar a regra no Datadog. A publicação para alertar a equipe exige uma decisão separada.`;
 }
 export const draftReasons: Record<string, string> = {
   draft_write_disabled:
@@ -136,6 +136,17 @@ export function customerReport(
   }
   if (data.monitor_plan) {
     lines.push("", "## Plano de monitoramento", "");
+    const coverage = data.monitor_plan.coverage;
+    if (coverage) {
+      lines.push("Cobertura ainda em validação.",
+        `${coverage.summary.identified} necessidades identificadas; ${coverage.summary.validated_in_replay} validadas nos ensaios; ${coverage.summary.investigating} sem detecção comprovada.`,
+        coverage.calibration.reason || "Baseline ainda insuficiente.", coverage.limitation, "");
+      for (const r of coverage.requirements.filter(r => r.status === "investigating")) {
+        lines.push(`- ${r.title}: ${r.reason}`);
+        if (r.acceptance) lines.push(`  Evidência necessária: ${r.acceptance}`);
+      }
+      lines.push("");
+    }
     for (const p of data.monitor_plan.proposals) {
       const d = evaluation.plan_decisions?.[p.id];
       lines.push(

@@ -27,3 +27,18 @@ test('technical hypotheses consolidate repeated routes and do not ask for approv
   assert.match(report,/catalog · \/release · b/);
   assert.doesNotMatch(report,/aguardando revisão do cliente/);
 });
+
+test('coverage download distinguishes inferred obligations from detection proof', () => {
+  const run: ReadinessEvaluation = {id:'calibrated',state:'AWAITING_CONTINUATION',data:{
+    input:{mode:'real'},recommendations:[],findings:[],monitor_plan:{tier:'Gold',proposals:[],gaps:[],
+      coverage:{version:1,status:'incomplete',summary:{identified:2,validated_in_replay:0,investigating:2},
+        limitation:'Ensaio controlado não comprova entrega de alertas.',
+        calibration:{status:'incomplete',reason:'Baseline do Lab ainda insuficiente.'},
+        requirements:[{id:'state',kind:'state_progress',subject:'bookings',title:'Conclusão da reserva',
+          reason:'Comparar intenção com resultado no destinatário.',status:'investigating',proposal_ids:[],evidence_refs:['source']}]}}}};
+  const text=customerReport(run);
+  assert.match(text,/2 necessidades identificadas; 0 validadas nos ensaios; 2 sem detecção comprovada/);
+  assert.match(text,/Conclusão da reserva/);
+  assert.match(text,/Baseline do Lab ainda insuficiente/);
+  assert.doesNotMatch(text,/Decisão pendente/);
+});
