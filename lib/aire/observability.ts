@@ -275,6 +275,7 @@ export type CustomerRecommendation = {
 };
 export type EntryMonitoring = {
   status: string;
+  calibration?: { scope?: string };
   from?: number;
   to?: number;
   method?: string;

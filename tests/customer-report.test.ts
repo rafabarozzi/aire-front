@@ -37,7 +37,7 @@ test('coverage download distinguishes inferred obligations from detection proof'
         requirements:[{id:'state',kind:'state_progress',subject:'bookings',title:'Conclusão da reserva',
           reason:'Comparar intenção com resultado no destinatário.',status:'investigating',proposal_ids:[],evidence_refs:['source']}]}}}};
   const text=customerReport(run);
-  assert.match(text,/2 necessidades identificadas; 0 validadas nos ensaios; 2 sem detecção comprovada/);
+  assert.match(text,/2 necessidades inferidas do manifesto; 0 condições satisfeitas em replay no Lab; 2 sem detecção comprovada/);
   assert.match(text,/Conclusão da reserva/);
   assert.match(text,/Baseline do Lab ainda insuficiente/);
   assert.doesNotMatch(text,/Decisão pendente/);

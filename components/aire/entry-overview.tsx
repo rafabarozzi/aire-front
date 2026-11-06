@@ -21,6 +21,7 @@ const statusColors: Record<string, string> = {
 };
 
 export function EntryOverview({ entry }: { entry: EntryMonitoring }) {
+  const lab = entry.calibration?.scope === "controlled_lab";
   const counts = Object.entries(entry.counts || {});
   const total = counts.reduce((sum, [, n]) => sum + n, 0);
   const errors = counts.reduce(
@@ -47,12 +48,17 @@ export function EntryOverview({ entry }: { entry: EntryMonitoring }) {
         <div className={styles.kicker}>
           <Activity size={16} aria-hidden /> Entrada da jornada
         </div>
-        <h3>{errors ? "Falhas na entrada" : "Tráfego observado"}</h3>
+        <h3>{lab ? "Visão geral do Lab" : errors ? "Falhas na entrada" : "Tráfego observado"}</h3>
         <div className={styles.route}>
           <b>{entry.method}</b>
           <code>{entry.route}</code>
         </div>
-        {errors > 0 && (
+        {lab ? (
+          <p>
+            Os totais incluem falhas provocadas nos ensaios. A calibração usa
+            janelas separadas, descritas em cada proposta.
+          </p>
+        ) : errors > 0 && (
           <p>
             Cabe à equipe da jornada verificar o impacto dessas falhas no
             resultado final.

@@ -115,6 +115,8 @@ export function customerReport(
   if (data.entry_monitoring) {
     const m = data.entry_monitoring;
     lines.push("", "## Proteção da entrada", "", ...observationText(m));
+    if (m.calibration?.scope === "controlled_lab")
+      lines.push("Visão geral do Lab: os totais incluem falhas provocadas nos ensaios. A calibração usa janelas separadas, descritas em cada proposta.");
     if (m.from && m.to)
       lines.push(
         `Período medido UTC · ${new Date(m.from * 1000).toISOString()} a ${new Date(m.to * 1000).toISOString()}`,
@@ -139,7 +141,7 @@ export function customerReport(
     const coverage = data.monitor_plan.coverage;
     if (coverage) {
       lines.push("Cobertura ainda em validação.",
-        `${coverage.summary.identified} necessidades identificadas; ${coverage.summary.validated_in_replay} validadas nos ensaios; ${coverage.summary.investigating} sem detecção comprovada.`,
+        `${coverage.summary.identified} necessidades inferidas do manifesto; ${coverage.summary.validated_in_replay} condições satisfeitas em replay no Lab; ${coverage.summary.investigating} sem detecção comprovada.`,
         coverage.calibration.reason || "Baseline ainda insuficiente.", coverage.limitation, "");
       for (const r of coverage.requirements.filter(r => r.status === "investigating")) {
         lines.push(`- ${r.title}: ${r.reason}`);
