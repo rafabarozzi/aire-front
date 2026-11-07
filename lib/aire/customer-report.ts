@@ -112,17 +112,18 @@ export function customerReport(
     lines.push(
       `Janela UTC: ${new Date(w.from * 1000).toISOString()} a ${new Date(w.to * 1000).toISOString()}.`,
     );
+  const appendix: string[] = [];
   if (data.entry_monitoring) {
     const m = data.entry_monitoring;
-    lines.push("", "## Proteção da entrada", "", ...observationText(m));
+    appendix.push("", "## Proteção da entrada", "", ...observationText(m));
     if (m.calibration?.scope === "controlled_lab")
-      lines.push("Visão geral do Lab: os totais incluem falhas provocadas nos ensaios. A calibração usa janelas separadas, descritas em cada proposta.");
+      appendix.push("Visão geral do Lab: os totais incluem falhas provocadas nos ensaios. A calibração usa janelas separadas, descritas em cada proposta.");
     if (m.from && m.to)
-      lines.push(
+      appendix.push(
         `Período medido UTC · ${new Date(m.from * 1000).toISOString()} a ${new Date(m.to * 1000).toISOString()}`,
       );
     if (m.monitor_draft && !data.monitor_plan)
-      lines.push(
+      appendix.push(
         "",
         draftDescription(m),
         "",
@@ -132,35 +133,41 @@ export function customerReport(
           : "Validação do Datadog pendente.",
       );
     if (m.matching_monitor_ids?.length)
-      lines.push(
+      appendix.push(
         `Monitores com a mesma condição · ${m.matching_monitor_ids.join(", ")}.`,
       );
   }
   if (data.monitor_plan) {
     lines.push("", "## Plano de monitoramento", "");
+    const summary = data.monitor_plan.coverage?.summary;
+    if (summary) lines.push(
+      `${data.monitor_plan.proposals.length} propostas para decisão. A cobertura ainda está em validação: ${summary.validated_in_replay} de ${summary.identified} necessidades comprovadas no Lab; ${summary.investigating} pendentes.`,
+      "As propostas abaixo descrevem o que será implantado. Aprovação registrada não significa monitor ativo.",
+      "",
+    );
     const experiments = data.monitor_plan.experiments;
     if (experiments?.cases?.length) {
       const affected = experiments.cases.filter(c => c.fault_materialized && c.independent_outcome_broken);
-      lines.push("### Evidência dos ensaios", "",
+      appendix.push("### Evidência dos ensaios", "",
         `${affected.filter(c => c.condition_met).length} de ${affected.length} cenários com impacto comprovado atingiram a condição de disparo.`,
         `Ambiente ensaiado: ${experiments.testing_environment}. Destino das propostas: ${experiments.target_environment}; validação no destino incluída no plano de aplicação.`,
         `${experiments.training} execuções de treinamento; ${experiments.holdout} controles reservados.`,
         "| Ensaio | Execuções | Divergências detectadas | Condição de disparo |", "| --- | ---: | ---: | --- |");
-      for (const c of experiments.cases) lines.push(`| ${c.title.replaceAll("|", "\\|").replaceAll("\n", " ")} | ${c.transactions} | ${c.detected_transactions} | ${c.condition_met ? "Atingida" : "Não comprovada"} |`);
-      lines.push(experiments.limitation || "", "");
-      if (experiments.target_validation === "baseline_verified" && experiments.target_calibration) lines.push(`Baseline confirmada em ${experiments.target_environment}: ${experiments.target_calibration.training_count} execuções de treinamento e ${experiments.target_calibration.holdout_count} controles reservados. Instalação contínua do coletor incluída na proposta.`, "");
-      if (experiments.target_validation === "baseline_verified" && experiments.target_calibration?.entry_paths) lines.push(`Acesso validado: ${experiments.target_calibration.entry_paths.public ?? 0} compras pelo endereço público autenticado e ${experiments.target_calibration.entry_paths.internal ?? 0} pelas APIs internas. Falhas ensaiadas nas réplicas isoladas.`, "");
+      for (const c of experiments.cases) appendix.push(`| ${c.title.replaceAll("|", "\\|").replaceAll("\n", " ")} | ${c.transactions} | ${c.detected_transactions} | ${c.condition_met ? "Atingida" : "Não comprovada"} |`);
+      appendix.push(experiments.limitation || "", "");
+      if (experiments.target_validation === "baseline_verified" && experiments.target_calibration) appendix.push(`Baseline confirmada em ${experiments.target_environment}: ${experiments.target_calibration.training_count} execuções de treinamento e ${experiments.target_calibration.holdout_count} controles reservados. Instalação contínua do coletor incluída na proposta.`, "");
+      if (experiments.target_validation === "baseline_verified" && experiments.target_calibration?.entry_paths) appendix.push(`Acesso validado: ${experiments.target_calibration.entry_paths.public ?? 0} compras pelo endereço público autenticado e ${experiments.target_calibration.entry_paths.internal ?? 0} pelas APIs internas. Falhas ensaiadas nas réplicas isoladas.`, "");
     }
     const coverage = data.monitor_plan.coverage;
     if (coverage) {
-      lines.push("Cobertura ainda em validação.",
+      appendix.push("Cobertura ainda em validação.",
         `${coverage.summary.identified} necessidades inferidas do manifesto; ${coverage.summary.validated_in_replay} condições satisfeitas em replay no Lab; ${coverage.summary.investigating} sem detecção comprovada.`,
         coverage.calibration.reason || "Baseline ainda insuficiente.", coverage.limitation, "");
       for (const r of coverage.requirements.filter(r => r.status === "investigating")) {
-        lines.push(`- ${r.title}: ${r.reason}`);
-        if (r.acceptance) lines.push(`  Evidência necessária: ${r.acceptance}`);
+        appendix.push(`- ${r.title}: ${r.reason}`);
+        if (r.acceptance) appendix.push(`  Evidência necessária: ${r.acceptance}`);
       }
-      lines.push("");
+      appendix.push("");
     }
     for (const p of data.monitor_plan.proposals) {
       const d = evaluation.plan_decisions?.[p.id];
@@ -179,14 +186,11 @@ export function customerReport(
           ? `Decisão registrada · ${d.choice === "approved" ? "Aprovada" : "Recusada"}`
           : "Decisão pendente",
         "",
-        "```json",
-        JSON.stringify(p.configuration, null, 2),
-        "```",
-        "",
       );
-      if (p.setup) lines.push("Implementação incluída:", ...p.setup.steps.map(s => `- ${s}`), "");
+      if (p.setup) lines.push("Implementação incluída:", "", ...p.setup.steps.map(s => `- ${s}`), "");
+      appendix.push(`### Configuração · ${p.title}`, "", `Versão · ${p.version}`, "", "```json", JSON.stringify(p.configuration, null, 2), "```", "");
     }
-    lines.push(...data.monitor_plan.gaps);
+    appendix.push(...data.monitor_plan.gaps);
   }
   if (draftState) {
     const states: Record<string, string> = {
@@ -209,6 +213,7 @@ export function customerReport(
       "",
       "A visibilidade do inventário é parcial. Cabe ao AIRE conferir a cobertura equivalente antes de criar outro monitor.",
     );
+  if (appendix.length) lines.push("", "## Anexo técnico · medições e comprovação", "", ...appendix);
   lines.push(
     "",
     "## Cobertura e investigações técnicas do AIRE",
