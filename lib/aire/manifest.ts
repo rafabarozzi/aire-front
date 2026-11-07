@@ -23,7 +23,8 @@ export const manifestProjection = z
           name: z.string(),
           type: z.string(),
           detail: z.string(),
-          ownedBy: ref.optional(),
+          ownedBy: ref.nullish(),
+          system: z.string().nullish(),
         }),
       )
       .max(10000),
