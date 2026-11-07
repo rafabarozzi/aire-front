@@ -1,10 +1,11 @@
 import type { MonitoringExperiments } from "@/lib/aire/observability";
+import { recordEvidence } from "@/lib/aire/record-evidence";
 import styles from "./customer-review.module.css";
 
 export function MonitoringExperimentsPanel({ evidence }: { evidence: MonitoringExperiments }) {
   const cases = evidence.cases ?? [];
-  const passed = cases.filter(c => c.condition_met);
   const affected = cases.filter(c => c.fault_materialized && c.independent_outcome_broken);
+  const passed = affected.filter(c => c.condition_met);
   const observed = cases.reduce((sum, c) => sum + c.transactions, 0);
   const unknown = cases.reduce((sum, c) => sum + c.unknown_transactions, 0);
   const verified = evidence.provider_evidence?.filter(p => p.status === "verified").length ?? 0;
@@ -29,5 +30,19 @@ export function MonitoringExperimentsPanel({ evidence }: { evidence: MonitoringE
       </div>)}</div>
       <p>{evidence.limitation}</p>
     </details>
+    {recordEvidence(evidence).map(proof => <section key={proof.id} aria-label="Ensaios de integridade dos registros">
+      <h5>Integridade dos registros</h5>
+      <p><strong>{proof.detected} de {proof.affected} cenários</strong> com disparo e recuperação conferidos no Datadog. {proof.verifiedSeries} consultas de séries verificadas.</p>
+      <p>Esta verificação usa um detector independente. A comprovação se limita aos registros e operações ensaiados em {proof.environment ?? "ambiente ainda não confirmado"}.</p>
+      <details><summary>Ver falhas nos registros e recuperação</summary>
+        <div className={styles.proofCases}>{proof.cases.map(c => <div key={c.id}>
+          <span><b>{c.title}</b><small>{c.detected_transactions} de {c.transactions} execuções com divergência detectada</small></span>
+          <span className={c.verified ? styles.proofPass : styles.proofPending}>{c.verified ? "Disparo e recuperação conferidos" : "Comprovação a completar"}</span>
+        </div>)}</div>
+        <p>{proof.collectorVerified ? "Perda de coleta, ausência de emissão e recuperação comprovadas no ensaio." : "Continuidade da coleta ainda em validação pelo AIRE."}</p>
+        {proof.status === "invalid_evidence" && <p>O AIRE está conferindo a evidência; ela não sustenta uma proposta para aprovação.</p>}
+        <p>{proof.limitation}</p>
+      </details>
+    </section>)}
   </aside>;
 }

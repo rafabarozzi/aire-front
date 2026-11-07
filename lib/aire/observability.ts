@@ -321,6 +321,17 @@ export type MonitoringExperiments = {
   recurrence?: {status: string; threshold?: number; cadence_seconds?: number; maturity_seconds?: number; controls?: Record<string, {observations: number; failed: number; unknown: number}>};
   cases?: {id: string; title: string; scenario: string; transactions: number; detected_transactions: number; unknown_transactions: number; fault_materialized: boolean; independent_outcome_broken: boolean; independent_outcome_healthy?: boolean; condition_met?: boolean}[];
   provider_evidence?: {metric: string; environment?: string; status: string}[];
+  record_integrity?: RecordIntegrityExperiments[];
+};
+export type RecordIntegrityExperiments = {
+  status: string; plan_id?: string; model_revision?: string;
+  testing_environment?: string; target_environment?: string; limitation?: string;
+  cases?: (NonNullable<MonitoringExperiments["cases"]>[number] & {
+    record_proof?: {provider_verified?: boolean; recovered?: boolean};
+  })[];
+  provider_evidence?: MonitoringExperiments["provider_evidence"];
+  recurrence?: MonitoringExperiments["recurrence"];
+  telemetry_gap?: {status: string; no_data_seconds?: number; proof_scope?: string};
 };
 export type ThresholdCalibration = {
   status: "validated" | "rejected" | "insufficient_evidence";

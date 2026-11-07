@@ -4,6 +4,7 @@ import type {
   ReadinessEvaluation,
   PlanProposal,
 } from "./observability.ts";
+import { recordEvidence } from "./record-evidence.ts";
 
 type Scope = NonNullable<CustomerRecommendation["scopes"]>[number];
 type Evidence = NonNullable<CustomerRecommendation["evidence"]>[number];
@@ -157,6 +158,17 @@ export function customerReport(
       appendix.push(experiments.limitation || "", "");
       if (experiments.target_validation === "baseline_verified" && experiments.target_calibration) appendix.push(`Baseline confirmada em ${experiments.target_environment}: ${experiments.target_calibration.training_count} execuções de treinamento e ${experiments.target_calibration.holdout_count} controles reservados. Instalação contínua do coletor incluída na proposta.`, "");
       if (experiments.target_validation === "baseline_verified" && experiments.target_calibration?.entry_paths) appendix.push(`Acesso validado: ${experiments.target_calibration.entry_paths.public ?? 0} compras pelo endereço público autenticado e ${experiments.target_calibration.entry_paths.internal ?? 0} pelas APIs internas. Falhas ensaiadas nas réplicas isoladas.`, "");
+    }
+    for (const proof of recordEvidence(experiments ?? {status: "unknown"})) {
+      appendix.push("### Integridade dos registros", "",
+        `${proof.detected} de ${proof.affected} cenários com impacto comprovado tiveram disparo e recuperação conferidos no Datadog.`,
+        `${proof.verifiedSeries} consultas de séries verificadas. Ambiente ensaiado: ${proof.environment ?? "não confirmado"}.`,
+        "Esta verificação usa um detector independente. Seus resultados não ampliam a cobertura de outros registros ou operações da jornada.",
+        proof.collectorVerified ? "Perda de coleta, ausência de emissão e recuperação comprovadas no ensaio." : "Continuidade da coleta ainda em validação pelo AIRE.",
+        "| Ensaio | Execuções | Divergências detectadas | Disparo e recuperação |", "| --- | ---: | ---: | --- |");
+      for (const c of proof.cases) appendix.push(`| ${c.title.replaceAll("|", "\\|").replaceAll("\n", " ")} | ${c.transactions} | ${c.detected_transactions} | ${c.verified ? "Conferidos no Datadog" : "Não comprovados"} |`);
+      if (proof.status === "invalid_evidence") appendix.push("O AIRE está conferindo a evidência; ela não sustenta uma proposta para aprovação.");
+      appendix.push(proof.limitation || "", "");
     }
     const coverage = data.monitor_plan.coverage;
     if (coverage) {
