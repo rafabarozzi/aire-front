@@ -26,7 +26,7 @@ export function MonitoringExperimentsPanel({ evidence }: { evidence: MonitoringE
     <details><summary>Ver cenários e resultados</summary>
       <div className={styles.proofCases}>{cases.map(c => <div key={c.id}>
         <span><b>{c.title}</b><small>{c.detected_transactions} de {c.transactions} execuções com divergência detectada</small></span>
-        <span className={c.condition_met ? styles.proofPass : styles.proofPending}>{c.condition_met ? "Condição de disparo atingida" : !c.fault_materialized ? "Injeção não comprovada" : c.independent_outcome_healthy && c.detected_transactions === 0 ? "Resultado final preservado" : !c.independent_outcome_broken ? "Sem impacto final comprovado" : "Detecção a completar"}</span>
+        <span className={c.condition_met ? styles.proofPass : styles.proofPending}>{c.condition_met ? "Condição de disparo atingida" : !c.fault_materialized ? "Injeção não comprovada" : c.independent_outcome_healthy && c.detected_transactions === 0 && c.unknown_transactions === 0 ? "Controle saudável · sem falso alerta" : !c.independent_outcome_broken ? "Sem impacto final comprovado" : "Detecção a completar"}</span>
       </div>)}</div>
       <p>{evidence.limitation}</p>
     </details>

@@ -153,8 +153,8 @@ export function customerReport(
         `${affected.filter(c => c.condition_met).length} de ${affected.length} cenários com impacto comprovado atingiram a condição de disparo.`,
         `Ambiente ensaiado: ${experiments.testing_environment}. Destino das propostas: ${experiments.target_environment}; validação no destino incluída no plano de aplicação.`,
         `${experiments.training} execuções de treinamento; ${experiments.holdout} controles reservados.`,
-        "| Ensaio | Execuções | Divergências detectadas | Condição de disparo |", "| --- | ---: | ---: | --- |");
-      for (const c of experiments.cases) appendix.push(`| ${c.title.replaceAll("|", "\\|").replaceAll("\n", " ")} | ${c.transactions} | ${c.detected_transactions} | ${c.condition_met ? "Atingida" : "Não comprovada"} |`);
+        "| Ensaio | Execuções | Divergências detectadas | Resultado do ensaio |", "| --- | ---: | ---: | --- |");
+      for (const c of experiments.cases) appendix.push(`| ${c.title.replaceAll("|", "\\|").replaceAll("\n", " ")} | ${c.transactions} | ${c.detected_transactions} | ${c.condition_met ? "Condição de disparo atingida" : c.fault_materialized && c.independent_outcome_healthy && c.detected_transactions === 0 && c.unknown_transactions === 0 ? "Controle saudável · sem falso alerta" : "Detecção não comprovada"} |`);
       appendix.push(experiments.limitation || "", "");
       if (experiments.target_validation === "baseline_verified" && experiments.target_calibration) appendix.push(`Baseline confirmada em ${experiments.target_environment}: ${experiments.target_calibration.training_count} execuções de treinamento e ${experiments.target_calibration.holdout_count} controles reservados. Instalação contínua do coletor incluída na proposta.`, "");
       if (experiments.target_validation === "baseline_verified" && experiments.target_calibration?.entry_paths) appendix.push(`Acesso validado: ${experiments.target_calibration.entry_paths.public ?? 0} compras pelo endereço público autenticado e ${experiments.target_calibration.entry_paths.internal ?? 0} pelas APIs internas. Falhas ensaiadas nas réplicas isoladas.`, "");

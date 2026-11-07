@@ -42,3 +42,15 @@ test('coverage download distinguishes inferred obligations from detection proof'
   assert.match(text,/Baseline do Lab ainda insuficiente/);
   assert.doesNotMatch(text,/Decisão pendente/);
 });
+
+test('healthy native controls differ from missing detection and incomplete collection', () => {
+  const control = {id:'control', title:'Cache sem gravação', scenario:'write_without_effect', transactions:3,
+    detected_transactions:0, unknown_transactions:0, fault_materialized:true,
+    independent_outcome_broken:false, independent_outcome_healthy:true, condition_met:false};
+  const run: ReadinessEvaluation = {id:'control', state:'AWAITING_CONTINUATION', data:{input:{mode:'real'},recommendations:[],findings:[],
+    monitor_plan:{tier:'Gold', proposals:[], gaps:[], experiments:{status:'lab_validated', cases:[control]}}}};
+  assert.match(customerReport(run), /Cache sem gravação \| 3 \| 0 \| Controle saudável · sem falso alerta/);
+  control.unknown_transactions=1;
+  assert.doesNotMatch(customerReport(run), /Controle saudável · sem falso alerta/);
+  assert.match(customerReport(run), /Detecção não comprovada/);
+});
