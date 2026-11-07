@@ -317,8 +317,9 @@ export type MonitoringExperiments = {
   status: string; testing_environment?: string; target_environment?: string; target_validation?: string;
   model_revision?: string; bundle_hash?: string; training?: number; holdout?: number; constraints?: number;
   limitation?: string; reason?: string;
+  target_calibration?: {status: string; environment: string; observations: number; training_count: number; holdout_count: number; threshold?: number; failed_observations: number; unknown_observations: number; entry_paths?: {public?: number; internal?: number}};
   recurrence?: {status: string; threshold?: number; cadence_seconds?: number; maturity_seconds?: number; controls?: Record<string, {observations: number; failed: number; unknown: number}>};
-  cases?: {id: string; title: string; scenario: string; transactions: number; detected_transactions: number; unknown_transactions: number; fault_materialized: boolean; independent_outcome_broken: boolean; condition_met?: boolean}[];
+  cases?: {id: string; title: string; scenario: string; transactions: number; detected_transactions: number; unknown_transactions: number; fault_materialized: boolean; independent_outcome_broken: boolean; independent_outcome_healthy?: boolean; condition_met?: boolean}[];
   provider_evidence?: {metric: string; environment?: string; status: string}[];
 };
 export type ThresholdCalibration = {

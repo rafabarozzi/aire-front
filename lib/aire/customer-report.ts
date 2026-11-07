@@ -148,6 +148,8 @@ export function customerReport(
         "| Ensaio | Execuções | Divergências detectadas | Condição de disparo |", "| --- | ---: | ---: | --- |");
       for (const c of experiments.cases) lines.push(`| ${c.title.replaceAll("|", "\\|").replaceAll("\n", " ")} | ${c.transactions} | ${c.detected_transactions} | ${c.condition_met ? "Atingida" : "Não comprovada"} |`);
       lines.push(experiments.limitation || "", "");
+      if (experiments.target_validation === "baseline_verified" && experiments.target_calibration) lines.push(`Baseline confirmada em ${experiments.target_environment}: ${experiments.target_calibration.training_count} execuções de treinamento e ${experiments.target_calibration.holdout_count} controles reservados. Instalação contínua do coletor incluída na proposta.`, "");
+      if (experiments.target_validation === "baseline_verified" && experiments.target_calibration?.entry_paths) lines.push(`Acesso validado: ${experiments.target_calibration.entry_paths.public ?? 0} compras pelo endereço público autenticado e ${experiments.target_calibration.entry_paths.internal ?? 0} pelas APIs internas. Falhas ensaiadas nas réplicas isoladas.`, "");
     }
     const coverage = data.monitor_plan.coverage;
     if (coverage) {

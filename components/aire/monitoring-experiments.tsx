@@ -20,11 +20,12 @@ export function MonitoringExperimentsPanel({ evidence }: { evidence: MonitoringE
       <div><strong>{evidence.holdout ?? 0}</strong><span>Controles reservados</span></div>
       <div><strong>{verified}</strong><span>Séries conferidas no Datadog</span></div>
     </div>
-    <p className={styles.proofScope}><strong>Escopo da prova</strong> · {evidence.testing_environment}. A instalação e os controles em {evidence.target_environment} fazem parte do plano de aplicação. {unknown > 0 && `${unknown} execuções tiveram medição incompleta.`} A entrega de notificações ainda não foi testada.</p>
+    <p className={styles.proofScope}><strong>Escopo da prova</strong> · Falhas ensaiadas em {evidence.testing_environment}. {evidence.target_validation === "baseline_verified" ? `Baseline e medição confirmadas em ${evidence.target_environment}: ${evidence.target_calibration?.training_count} execuções de treinamento e ${evidence.target_calibration?.holdout_count} controles reservados. A aplicação inclui manter o coletor em execução.` : `A instalação e os controles em ${evidence.target_environment} fazem parte do plano de aplicação.`} {unknown > 0 && `${unknown} execuções tiveram medição incompleta.`} A entrega de notificações ainda não foi testada.</p>
+    {evidence.target_validation === "baseline_verified" && evidence.target_calibration?.entry_paths && <p className={styles.proofScope}>Acesso validado: {evidence.target_calibration.entry_paths.public ?? 0} compras pelo endereço público autenticado e {evidence.target_calibration.entry_paths.internal ?? 0} pelas APIs internas. Os testes de falha ocorreram nas réplicas isoladas.</p>}
     <details><summary>Ver cenários e resultados</summary>
       <div className={styles.proofCases}>{cases.map(c => <div key={c.id}>
         <span><b>{c.title}</b><small>{c.detected_transactions} de {c.transactions} execuções com divergência detectada</small></span>
-        <span className={c.condition_met ? styles.proofPass : styles.proofPending}>{c.condition_met ? "Condição de disparo atingida" : !c.fault_materialized ? "Injeção não comprovada" : !c.independent_outcome_broken ? "Sem impacto final comprovado" : "Detecção a completar"}</span>
+        <span className={c.condition_met ? styles.proofPass : styles.proofPending}>{c.condition_met ? "Condição de disparo atingida" : !c.fault_materialized ? "Injeção não comprovada" : c.independent_outcome_healthy && c.detected_transactions === 0 ? "Resultado final preservado" : !c.independent_outcome_broken ? "Sem impacto final comprovado" : "Detecção a completar"}</span>
       </div>)}</div>
       <p>{evidence.limitation}</p>
     </details>
