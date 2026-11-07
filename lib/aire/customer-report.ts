@@ -142,12 +142,19 @@ export function customerReport(
     lines.push("", "## Plano de monitoramento", "");
     const summary = data.monitor_plan.coverage?.summary;
     if (summary) lines.push(
-      `${data.monitor_plan.proposals.length} propostas para decisão. A cobertura ainda está em validação: ${summary.validated_in_replay} de ${summary.identified} necessidades comprovadas no Lab; ${summary.investigating} pendentes.`,
+      data.monitor_plan.source_window ? `${data.monitor_plan.proposals.length} propostas para decisão. A contagem histórica de cobertura será recalculada para a versão corrigida do detector.` : `${data.monitor_plan.proposals.length} propostas para decisão. A cobertura ainda está em validação: ${summary.validated_in_replay} de ${summary.identified} necessidades comprovadas no Lab; ${summary.investigating} pendentes.`,
       "As propostas abaixo descrevem o que será implantado. Aprovação registrada não significa monitor ativo.",
       "",
     );
     const experiments = data.monitor_plan.experiments;
-    if (experiments?.cases?.length) {
+    const sourceWindow = data.monitor_plan.source_window;
+    if (sourceWindow?.status === "lab_validated") lines.push(
+      "", "### Validade do valor usado pela jornada", "",
+      `O código permite manter o valor em cache por até ${sourceWindow.max_age_seconds} segundos após a gravação. O detector anterior gerava falso alerta em mudanças legítimas da origem.`,
+      `${sourceWindow.healthy_controls} controles saudáveis sem alerta; ${sourceWindow.stale_detected} resultados com valor vencido detectados; recuperação confirmada no Datadog.`,
+      sourceWindow.limitation || "", "",
+    );
+    if (experiments?.cases?.length && !sourceWindow) {
       const affected = experiments.cases.filter(c => c.fault_materialized && c.independent_outcome_broken);
       appendix.push("### Evidência dos ensaios", "",
         `${affected.filter(c => c.condition_met).length} de ${affected.length} cenários com impacto comprovado atingiram a condição de disparo.`,
@@ -173,7 +180,7 @@ export function customerReport(
     const coverage = data.monitor_plan.coverage;
     if (coverage) {
       appendix.push("Cobertura ainda em validação.",
-        `${coverage.summary.identified} necessidades inferidas do manifesto; ${coverage.summary.validated_in_replay} condições satisfeitas em replay no Lab; ${coverage.summary.investigating} sem detecção comprovada.`,
+        sourceWindow ? "A contagem histórica de cobertura será recalculada para a versão corrigida do detector." : `${coverage.summary.identified} necessidades inferidas do manifesto; ${coverage.summary.validated_in_replay} condições satisfeitas em replay no Lab; ${coverage.summary.investigating} sem detecção comprovada.`,
         coverage.calibration.reason || "Baseline ainda insuficiente.", coverage.limitation, "");
       for (const r of coverage.requirements.filter(r => r.status === "investigating")) {
         appendix.push(`- ${r.title}: ${r.reason}`);

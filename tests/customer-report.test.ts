@@ -54,3 +54,22 @@ test('healthy native controls differ from missing detection and incomplete colle
   assert.doesNotMatch(customerReport(run), /Controle saudável · sem falso alerta/);
   assert.match(customerReport(run), /Detecção não comprovada/);
 });
+
+test('source window proof replaces stale detector claims in the customer download', () => {
+  const run: ReadinessEvaluation = {id:'cache-window', state:'AWAITING_CONTINUATION', data:{
+    input:{mode:'real',environment:'demo'}, recommendations:[], findings:[],
+    monitor_plan:{tier:'Gold', proposals:[], gaps:[],
+      source_window:{status:'lab_validated', healthy_controls:5, stale_detected:3,
+        max_age_seconds:300, limitation:'Histórico completo no destino pendente.'},
+      experiments:{status:'lab_validated', training:20, holdout:10, testing_environment:'lab',
+        cases:[{id:'old',title:'Detector anterior',scenario:'old',transactions:3,
+          detected_transactions:3, unknown_transactions:0, fault_materialized:true,
+          independent_outcome_broken:true,condition_met:true}]},
+      coverage:{version:1,status:'incomplete',summary:{identified:57,validated_in_replay:41,investigating:16},
+        limitation:'Revalidação pendente',calibration:{status:'incomplete',reason:'Revisão'},requirements:[]}}}};
+  const report=customerReport(run);
+  assert.match(report,/5 controles saudáveis sem alerta; 3 resultados com valor vencido detectados/);
+  assert.match(report,/contagem histórica de cobertura será recalculada/);
+  assert.doesNotMatch(report,/Detector anterior/);
+  assert.doesNotMatch(report,/41 de 57/);
+});

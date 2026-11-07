@@ -58,14 +58,19 @@ export function MonitoringPlan({
           decisão no AIRE. A aplicação destas propostas no Datadog está desabilitada.
         </p>
       </header>
-      {plan.experiments?.cases?.length ? <MonitoringExperimentsPanel evidence={plan.experiments} /> : null}
+      {plan.source_window?.status === "lab_validated" && <aside className={styles.planCard} aria-label="Validade dos dados da jornada">
+        <h4>Valor usado pela jornada: ensaio corrigido</h4>
+        <p>O motor identificou que o código permite manter um valor em cache por até {plan.source_window.max_age_seconds} segundos após a gravação. Uma mudança da origem dentro desse prazo gerava falso alerta na versão anterior.</p>
+        <p><strong>{plan.source_window.healthy_controls} controles saudáveis sem alerta</strong> · {plan.source_window.stale_detected} resultados com valor vencido detectados · recuperação confirmada no Datadog.</p>
+        <p>{plan.source_window.limitation}</p>
+      </aside>}
+      {plan.source_window?.status === "invalid_evidence" && <aside className={styles.planCard} role="status"><p>{plan.source_window.reason}</p></aside>}
+      {plan.experiments?.cases?.length && !plan.source_window ? <MonitoringExperimentsPanel evidence={plan.experiments} /> : null}
       {plan.coverage && (
         <aside className={styles.planCard} aria-label="Validação da cobertura">
           <h4>Validação da cobertura da jornada</h4>
           <p>
-            {plan.coverage.summary.identified} necessidades de detecção inferidas do manifesto. {" "}
-            {plan.coverage.summary.validated_in_replay} com condição satisfeita em replay no Lab; {" "}
-            {plan.coverage.summary.investigating} ainda sem detecção comprovada.
+            {plan.source_window ? "A contagem histórica de cobertura será recalculada para a versão corrigida do detector." : <>{plan.coverage.summary.identified} necessidades de detecção inferidas do manifesto. {" "}{plan.coverage.summary.validated_in_replay} com condição satisfeita em replay no Lab; {" "}{plan.coverage.summary.investigating} ainda sem detecção comprovada.</>}
           </p>
           <p>A jornada ainda não tem cobertura completa demonstrada. As pendências de investigação ficam com o AIRE; somente mudanças com evidência de detecção aparecem para decisão.</p>
           <p>{plan.coverage.calibration.reason}</p>

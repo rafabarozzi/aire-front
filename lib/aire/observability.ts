@@ -348,6 +348,12 @@ export type MonitoringCoverage = {
     status: string; proposal_ids: string[]; evidence_refs: string[]; acceptance?: string}[];
 };
 export type PlanDecisions = Record<string,{ version: string; choice: "approved" | "declined"; decided_at: string }>;
+export type SourceWindowReview = {
+  status: string; reason?: string; base_revision?: string; model_revision?: string;
+  healthy_controls?: number; stale_detected?: number; recovery?: boolean;
+  max_age_seconds?: number; threshold?: number; target_status?: string;
+  limitation?: string; provider_checks?: {metric: string; status: string}[];
+};
 export type ReadinessEvaluation = {
   plan_decisions?: PlanDecisions;
   plan_reviewable?: boolean;
@@ -370,7 +376,7 @@ export type ReadinessEvaluation = {
     pause_reason?: string;
     read_only?: boolean;
     entry_monitoring?: EntryMonitoring;
-    monitor_plan?: {proposals: PlanProposal[]; gaps: string[]; tier: string; coverage?: MonitoringCoverage; experiments?: MonitoringExperiments};
+    monitor_plan?: {proposals: PlanProposal[]; gaps: string[]; tier: string; coverage?: MonitoringCoverage; experiments?: MonitoringExperiments; source_window?: SourceWindowReview};
     customer_recommendations?: CustomerRecommendation[];
     recommendations: ReadinessRecommendation[];
     findings: {
