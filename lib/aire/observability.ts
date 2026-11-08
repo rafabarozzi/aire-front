@@ -153,6 +153,7 @@ export type Capabilities = {
     reason?: string | null;
   };
   realRead?: { ready: boolean; reason?: string | null };
+  entryDraftExecution?: boolean;
   realExecution?: boolean;
   realResponses?: boolean;
 };
@@ -240,13 +241,132 @@ export function validateTags(
   ];
   return required.filter((k) => !values[k]?.trim());
 }
+export type CustomerRecommendation = {
+  version: string;
+  subject?: string;
+  operation?: string;
+  monitor_ids?: (number | string)[];
+  conditional?: boolean;
+  scopes?: {
+    service?: string;
+    route?: string;
+    metric?: string;
+    signal?: string;
+  }[];
+  evidence?: {
+    metric?: string;
+    metric_context?: {
+      observed_min?: number;
+      observed_max?: number;
+      samples?: number;
+      unit?: ({ short_name?: string; name?: string } | null)[];
+    } | null;
+    required_scope?: string[];
+    monitor_checks?: {
+      monitor_id?: number | string;
+      observed_thresholds?: { critical?: number; warning?: number };
+      observed_unit?: string;
+    }[];
+  }[];
+  id: string;
+  title: string;
+  explanation: string;
+  action: string;
+};
+export type EntryMonitoring = {
+  status: string;
+  calibration?: { scope?: string };
+  from?: number;
+  to?: number;
+  method?: string;
+  route?: string;
+  counts?: Record<string, number>;
+  buckets_with_traffic?: number;
+  buckets_with_5xx?: number;
+  buckets_without_traffic_witness?: number;
+  query?: string;
+  inventory_full_visibility?: boolean;
+  matching_monitor_ids?: (number | string)[];
+  monitor_draft?: {
+    validation: string;
+    configuration: { name: string; query: string; draft_status: "draft"; options: Record<string, unknown> };
+  };
+};
+
+export type CustomerDecision = {
+  choice: "approved" | "declined";
+  fingerprint: string;
+  actor: string;
+  at: string;
+};
+export type CustomerReview = {
+  revision: number;
+  decisions: Record<string, CustomerDecision>;
+};
+export type PlanProposal = {
+  id: string; version: string; action: "create" | "adjust"; title: string; trigger: string;
+  signal: string; role: string; severity: string; reason: string; safeguards: string;
+  validation: string; configuration: Record<string, unknown>; monitor_id?: number; before?: string;
+  calibration?: ThresholdCalibration;
+  benefit?: string;
+  application_status?: string;
+  setup?: { steps: string[]; cadence_seconds: number; completion_deadline_seconds: number; contract_revision: string; evidence_bundle: string; collector: Record<string, unknown> };
+  proof?: { cases?: string[]; controls?: Record<string, {observations: number; failed: number; unknown: number}>; provider?: string };
+};
+export type MonitoringExperiments = {
+  status: string; testing_environment?: string; target_environment?: string; target_validation?: string;
+  model_revision?: string; bundle_hash?: string; training?: number; holdout?: number; constraints?: number;
+  limitation?: string; reason?: string;
+  target_calibration?: {status: string; environment: string; observations: number; training_count: number; holdout_count: number; threshold?: number; failed_observations: number; unknown_observations: number; entry_paths?: {public?: number; internal?: number}};
+  recurrence?: {status: string; threshold?: number; cadence_seconds?: number; maturity_seconds?: number; controls?: Record<string, {observations: number; failed: number; unknown: number}>};
+  cases?: {id: string; title: string; scenario: string; transactions: number; detected_transactions: number; unknown_transactions: number; fault_materialized: boolean; independent_outcome_broken: boolean; independent_outcome_healthy?: boolean; condition_met?: boolean}[];
+  provider_evidence?: {metric: string; environment?: string; status: string}[];
+  record_integrity?: RecordIntegrityExperiments[];
+};
+export type RecordIntegrityExperiments = {
+  status: string; plan_id?: string; model_revision?: string;
+  testing_environment?: string; target_environment?: string; limitation?: string;
+  cases?: (NonNullable<MonitoringExperiments["cases"]>[number] & {
+    record_proof?: {provider_verified?: boolean; recovered?: boolean};
+  })[];
+  provider_evidence?: MonitoringExperiments["provider_evidence"];
+  recurrence?: MonitoringExperiments["recurrence"];
+  telemetry_gap?: {status: string; no_data_seconds?: number; proof_scope?: string};
+};
+export type ThresholdCalibration = {
+  status: "validated" | "rejected" | "insufficient_evidence";
+  reason: string; threshold?: number; unit?: string; window_seconds?: number;
+  false_positive_windows?: number[];
+  missed_incident_windows?: {at: number; scenario: string}[];
+  samples?: Record<string, number>;
+};
+export type MonitoringCoverage = {
+  version: number; status: string; limitation: string;
+  summary: {identified: number; validated_in_replay: number; investigating: number};
+  calibration: {status?: string; reason?: string; signals?: Record<string, ThresholdCalibration>};
+  requirements: {id: string; kind: string; subject: string; title: string; reason: string;
+    status: string; proposal_ids: string[]; evidence_refs: string[]; acceptance?: string}[];
+};
+export type PlanDecisions = Record<string,{ version: string; choice: "approved" | "declined"; decided_at: string }>;
+export type SourceWindowReview = {
+  status: string; reason?: string; base_revision?: string; model_revision?: string;
+  healthy_controls?: number; stale_detected?: number; recovery?: boolean;
+  max_age_seconds?: number; threshold?: number; target_status?: string;
+  limitation?: string; provider_checks?: {metric: string; status: string}[];
+};
 export type ReadinessEvaluation = {
+  plan_decisions?: PlanDecisions;
+  plan_reviewable?: boolean;
+  customer_review?: CustomerReview;
   id: string;
   analysis?: string;
   created_at?: string;
   state: string;
   data: {
-    input: { mode: string };
+    input: { mode: string; environment?: string };
+    manifest?: { journey?: { name?: string } };
+    discovery?: { from?: number; to?: number };
+    manifest_revision?: string;
     operational_context?: {
       revision: number;
       catalog: import("./operational-catalog.ts").OperationalCatalog;
@@ -255,6 +375,9 @@ export type ReadinessEvaluation = {
     policy_context?: { revision: number; policy: ObservabilityPolicy };
     pause_reason?: string;
     read_only?: boolean;
+    entry_monitoring?: EntryMonitoring;
+    monitor_plan?: {proposals: PlanProposal[]; gaps: string[]; tier: string; coverage?: MonitoringCoverage; experiments?: MonitoringExperiments; source_window?: SourceWindowReview};
+    customer_recommendations?: CustomerRecommendation[];
     recommendations: ReadinessRecommendation[];
     findings: {
       service?: string;
@@ -297,4 +420,21 @@ export function isReadinessInProgress(state: string): boolean {
     "INVESTIGATING",
     "EXECUTION_QUEUED",
   ].includes(state);
+}
+
+const evaluationLabels: Record<string, string> = {
+  QUEUED: "Na fila",
+  RUNNING: "Em andamento",
+  INVESTIGATING: "Investigação em andamento",
+  DISCOVERING: "Coletando evidências",
+  EVALUATING: "Avaliando cobertura",
+  AWAITING_CONTINUATION: "Análise parcial",
+  READY: "Avaliação disponível",
+  COMPLETED: "Concluída",
+  EXECUTION_QUEUED: "Execução na fila",
+  EXECUTING: "Aplicando alterações",
+  FAILED: "Falha na avaliação",
+};
+export function evaluationLabel(state: string) {
+  return Object.hasOwn(evaluationLabels, state) ? evaluationLabels[state] : "Consultar detalhes";
 }

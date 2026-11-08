@@ -806,3 +806,34 @@ test("real evaluation cannot execute when realExecution is false", async () => {
   assert.equal(response.status, 409);
   assert.equal(writes, 0);
 });
+
+test("advisory notes cannot be approved as provider changes", async () => {
+  await saveJourney("alpha", journey);
+  const path = `observability/journeys/${id}/evaluations/${evaluationId}`;
+  globalThis.fetch = async (_url, init) => {
+    assert.equal(init?.method || "GET", "GET");
+    return Response.json({id:evaluationId,analysis:id,state:"READY",data:{read_only:true}});
+  };
+  assert.equal((await call(path+"/decision","POST",{})).status,409);
+  assert.equal((await call(path+"/decision","POST",{},"bob")).status,404);
+});
+
+test("draft creation is forwarded with server-side journey scope and audited permissions",async()=>{
+  await saveJourney("alpha",journey);
+  const rev="a".repeat(64);
+  const calls:string[]=[];
+  globalThis.fetch=async(url,init)=>{
+    calls.push(String(url));
+    const headers=new Headers(init?.headers);
+    assert.equal(headers.get("x-aire-tenant"),"alpha");
+    assert.ok(headers.get("x-aire-actor"));
+    if(init?.method==="POST") assert.deepEqual(JSON.parse(String(init.body)),{analysis_id:id,revision:rev});
+    return Response.json({eligible:true,revision:rev,state:"proposed"});
+  };
+  const path=`observability/journeys/${id}/evaluations/${evaluationId}/entry-draft`;
+  assert.equal((await call(path)).status,200);
+  assert.ok(calls[0].endsWith(`/entry-draft?analysis_id=${id}`));
+  assert.equal((await call(path+"/approve","POST",{revision:rev,analysis_id:evaluationId})).status,422);
+  assert.equal((await call(path+"/approve","POST",{revision:rev})).status,200);
+  assert.equal((await call(path+"/apply","POST",{revision:rev},"bob")).status,404);
+});

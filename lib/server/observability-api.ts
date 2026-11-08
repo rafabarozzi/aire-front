@@ -4,6 +4,7 @@ import {
   responseContext,
 } from "../aire/operational-catalog.ts";
 import {
+  readCustomerReview,
   readOperationalCatalog,
   saveOperationalCatalog,
 } from "./observability-store.ts";
@@ -46,6 +47,7 @@ const capSchema = z.object({
   realRead: z
     .object({ ready: z.boolean(), reason: z.string().nullable().optional() })
     .optional(),
+  entryDraftExecution: z.boolean().optional(),
   realExecution: z.boolean().default(false),
   realResponses: z.boolean().default(false),
 });
@@ -103,20 +105,41 @@ function checked<S extends z.ZodTypeAny>(schema: S, raw: unknown): z.output<S> {
     );
   return r.data;
 }
+function recommendationVersions(evaluation: ReadinessEvaluation) {
+  return Object.fromEntries(
+    (evaluation.data.customer_recommendations || []).map((row) => [
+      row.id,
+      row.version,
+    ]),
+  );
+}
+async function withCustomerReview(
+  tenant: string,
+  evaluation: ReadinessEvaluation,
+) {
+  if (!evaluation.data?.customer_recommendations?.length) return evaluation;
+  return {
+    ...evaluation,
+    customer_review: await readCustomerReview(tenant, evaluation.id),
+  };
+}
 export async function observabilityApi(
   request: Request,
   path: string[],
   body: () => Promise<unknown>,
 ) {
   const method = request.method;
+  const draftAction = path[5] === "entry-draft" ? path[6] : undefined;
   const permission =
+    draftAction === "apply" && method === "POST" ? "readiness:execute" :
+    draftAction && method === "POST" ? "readiness:approve" :
     method === "GET"
       ? path[1] === "environments"
         ? "readiness:evaluate"
         : "readiness:read"
       : ["policy", "catalog"].includes(path[1])
         ? "readiness:configure"
-        : path[3] === "preferences" || path[5] === "accept"
+        : path[3] === "preferences" || ["accept", "decision", "plan-decision"].includes(path[5])
           ? "readiness:approve"
           : path[5] === "execute"
             ? "readiness:execute"
@@ -214,7 +237,7 @@ export async function observabilityApi(
         if (version.status !== "COMPLETED") continue;
         try {
           const found = await (
-            await engine(c.tenant, `/v1/readiness/analyses/${version.id}`, {
+            await engine(c.tenant, `/v1/readiness/analyses/${version.id}${u.searchParams.get("view") === "summary" ? "?view=summary" : ""}`, {
               headers,
             })
           ).json();
@@ -270,6 +293,22 @@ export async function observabilityApi(
       );
     }
   }
+  if (path[3] === "evaluations" && path[5] === "entry-draft" &&
+      z.string().uuid().safeParse(path[4]).success) {
+    const endpoint = `/v1/readiness/${path[4]}/entry-draft`;
+    if (method === "GET" && path.length === 6) {
+      const response = await engine(c.tenant, endpoint + "?analysis_id=" + j.id, { headers });
+      return response.json();
+    }
+    if (method !== "POST" || path.length !== 7 || !["approve", "decline", "apply"].includes(draftAction || ""))
+      throw new AppError(404, "not_found", "Ação não encontrada.");
+    const b = checked(z.object({revision:z.string().regex(/^[a-f0-9]{64}$/)}).strict(),await body());
+    const response = await engine(c.tenant, endpoint + "/" + draftAction,
+      {method, headers, body: JSON.stringify({...b, analysis_id:j.id})}, [403,404,409]);
+    if (!response.ok) throw new AppError(response.status, "draft_unavailable",
+      "A ação está indisponível para esta versão. Atualize a avaliação e confira a condição exibida.");
+    return response.json();
+  }
   if (path[3] !== "evaluations" || path.length > 6)
     throw new AppError(404, "not_found", "Recurso não encontrado.");
 
@@ -290,16 +329,48 @@ export async function observabilityApi(
         "Avaliação não encontrada nesta jornada.",
       );
   }
-  if (method === "GET" && !action)
-    return (
-      evaluation ?? (await (await engine(c.tenant, base, { headers })).json())
-    );
-  if (method === "GET" && action === "report")
-    return {
-      markdown: await (
-        await engine(c.tenant, base + "/report", { headers })
-      ).text(),
-    };
+  if (method === "GET" && !action) {
+    if (evaluation) return withCustomerReview(c.tenant.id, evaluation);
+    const panel = new URL(request.url).searchParams.get("view") === "panel";
+    const list: ReadinessEvaluation[] = await (
+      await engine(c.tenant, panel ? base + "?view=panel" : base, { headers })
+    ).json();
+    return Promise.all(list.map((row) => withCustomerReview(c.tenant.id, row)));
+  }
+  if (method === "POST" && action === "plan-decision" && evaluation) {
+    const selection = checked(z.object({
+      proposal:z.string().min(1).max(128), version:z.string().regex(/^[0-9a-f]{64}$/),
+      choice:z.enum(["approved","declined"]),
+    }).strict(),await body());
+    const response=await engine(c.tenant,base+"/plan-decision",{
+      method,headers,body:JSON.stringify({...selection,analysis_id:j.id}),
+    },[403,404,409]);
+    if (!response.ok) throw new AppError(response.status,"decision_unavailable",
+      "A decisão não foi registrada. Atualize a página e consulte a avaliação mais recente.");
+    return response.json();
+  }
+  if (method === "POST" && action === "decision" && evaluation) {
+    throw new AppError(409, "advisory_only", "Esta observação técnica não autoriza uma alteração no provedor.");
+  }
+  if (method === "GET" && action === "report" && evaluation) {
+    let markdown = await (
+      await engine(c.tenant, base + "/report", { headers })
+    ).text();
+    if (evaluation.data.customer_recommendations?.length) {
+      const review = await readCustomerReview(c.tenant.id, evaluation.id);
+      const versions = recommendationVersions(evaluation);
+      markdown += "\n\n### Decisões do cliente\n";
+      for (const row of evaluation.data.customer_recommendations) {
+        const saved = review.decisions[row.id];
+        const disposition =
+          saved?.fingerprint === versions[row.id]
+            ? `${saved.choice === "approved" ? "Aprovada" : "Recusada"} (${saved.at})`
+            : "Evidência técnica";
+        markdown += `\n- ${row.title} — ${disposition}`;
+      }
+    }
+    return { markdown };
+  }
   if (
     method !== "POST" ||
     (evaluationId && !["accept", "execute", "resume"].includes(action))
