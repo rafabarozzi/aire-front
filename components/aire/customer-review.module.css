@@ -338,9 +338,25 @@
 }
 .plan {
   display: grid;
-  gap: 14px;
+  gap: 16px;
   min-width: 0;
 }
+.planHero {
+  padding: clamp(22px, 3vw, 36px);
+  border-radius: 20px;
+  color: #eef5ff;
+  background: linear-gradient(125deg, #10284b, #174d65 70%, #17665d);
+}
+.planHero h3 { color: #fff; font-size: clamp(27px, 3vw, 38px); margin: 8px 0 12px; letter-spacing: -.035em; }
+.planHero > p { max-width: 72ch; line-height: 1.55; color: #d9e7f5; }
+.planEyebrow { text-transform: uppercase; letter-spacing: .12em; font-size: 11px; font-weight: 750; color: #96e6d5; }
+.planStats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 24px; }
+.planStats > div { padding: 16px; border: 1px solid #ffffff30; border-radius: 12px; background: #ffffff12; }
+.planStats strong { display: block; font-size: 30px; line-height: 1; color: #fff; font-variant-numeric: tabular-nums; }
+.planStats span { display: block; margin-top: 7px; font-size: 12px; color: #dcebf5; }
+.planHero .planBoundary { max-width: none; border-top: 1px solid #ffffff30; padding-top: 14px; margin-top: 19px; font-size: 13px; }
+.planSectionHeading h4 { font-size: 21px; color: var(--ink); margin: 0; }
+.planSectionHeading p { color: var(--subtle); margin: 5px 0 0; }
 .plan h3 {
   font-size: 22px;
   font-weight: 650;
@@ -355,9 +371,15 @@
 .planCard {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 16px;
   padding: clamp(14px, 2vw, 22px);
 }
+.planCard pre { overflow-x: auto; font-size: 12px; }
+.planCard ol { padding-left: 22px; line-height: 1.6; }
+.planTrigger { display: grid; gap: 5px; padding: 12px 15px; border-radius: 10px; background: var(--surface-soft); }
+.planTrigger strong { color: var(--ink); }
+.planValidated { color: #136d56 !important; background: #e9f8f0 !important; border-color: #b9e4d0 !important; }
+.planPending { color: #8b5b14 !important; background: #fff7e7 !important; border-color: #f0d59a !important; }
 .planCard h4 {
   margin: 8px 0;
   font-size: 18px;
@@ -411,3 +433,4 @@
 .proofPass { color:#14755d; }
 .proofPending { color:#936414; }
 @media(max-width:760px) { .proofGrid { grid-template-columns:repeat(2,minmax(0,1fr)); } .proofPanel {padding:16px;} .proofCases > div {align-items:flex-start; flex-direction:column; gap:8px;} .proofHeading {align-items:flex-start;flex-direction:column;} }
+@media(max-width:600px) { .planStats { grid-template-columns: 1fr; } .planStats > div { padding: 12px; } }

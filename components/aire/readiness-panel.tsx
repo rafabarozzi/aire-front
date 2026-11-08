@@ -422,19 +422,16 @@ export function ReadinessPanel({
             <span>
               <b>
                 {current.data.input.mode === "simulation"
-                  ? "Simulação"
-                  : "Ambiente"}
+                  ? "Exemplo ilustrativo"
+                  : current.data.input.environment === "demo" ? "Ambiente de demonstração" : "Ambiente"}
               </b>{" "}
-              {current.data.input.environment ||
-                (current.data.input.mode === "simulation"
-                  ? ""
-                  : "não informado")}
+              {current.data.input.mode === "simulation" ? "" : current.data.input.environment === "demo" ? "Commerce" : current.data.input.environment || "não informado"}
             </span>
             <span>{evaluationLabel(current.state)}</span>
             {current.data.input.mode !== "simulation" &&
               caps &&
               !caps.realExecution && (
-                <span>Publicação de alertas desabilitada</span>
+                <span>Somente leitura · monitores não serão ativados</span>
               )}
           </div>
           {(current.data.entry_monitoring ||

@@ -54,7 +54,6 @@ export function CustomerReviewPanel({
   const draft = entry?.monitor_draft;
   return (
     <section aria-label="Proteção da jornada" className={styles.review}>
-      {entry && <EntryOverview entry={entry} />}
       {plan && (
         <MonitoringPlan
           evaluation={evaluation}
@@ -64,6 +63,10 @@ export function CustomerReviewPanel({
           onDecisions={setDecisions}
         />
       )}
+      {entry && <details className={styles.group}>
+        <summary>Tráfego e respostas observados nesta avaliação <ChevronDown size={15} aria-hidden /></summary>
+        <EntryOverview entry={entry} />
+      </details>}
       {!plan && draft && (
         <article className={styles.proposal}>
           <div className={styles.proposalIcon}>
@@ -107,7 +110,7 @@ export function CustomerReviewPanel({
       )}
       <div className={styles.sectionTitle}>
         <h3>
-          <ListChecks size={19} aria-hidden /> Revisão técnica
+          <ListChecks size={19} aria-hidden /> Evidências e inventário técnico
         </h3>
         <button
           type="button"
