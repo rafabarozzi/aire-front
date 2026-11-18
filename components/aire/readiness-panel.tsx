@@ -58,7 +58,7 @@ export function ReadinessPanel({
   const [bulk, setBulk] = useState<ResponseSelection>(emptyResponseSelection());
   const refresh = useCallback(async () => {
     const generation = ++requestGeneration.current;
-    const query = new URLSearchParams({ view: "selected" });
+    const query = new URLSearchParams({ view: "selected", compact: "1" });
     if (active) query.set("selected", active);
     const result = await request<{ history: typeof history; evaluation: ReadinessEvaluation | null }>(
       base + "/evaluations?" + query,
@@ -263,7 +263,7 @@ export function ReadinessPanel({
                 <span>Somente leitura · monitores não serão ativados</span>
               )}
           </div>
-          {(current.data.entry_monitoring ||
+          {(current.data.monitor_plan || current.data.entry_monitoring ||
             !!current.data.customer_recommendations?.length) && (
             <CustomerReviewPanel
               key={current.id}

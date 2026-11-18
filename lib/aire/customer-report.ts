@@ -151,6 +151,7 @@ export function customerReport(
       const count = risks.filter(r => base.has(r.id) || r.proposals.some(id => approved.has(id))).length;
       const metric = (n:number) => risks.length ? Math.round(100 * n / risks.length) + "% (" + n + "/" + risks.length + ")" : "Indisponível";
       lines.push("Cobertura inicial comprovada · " + metric(base.size),
+        "Projetada com todas as propostas · " + metric(risks.filter(r => base.has(r.id) || r.proposals.length > 0).length),
         "Projetada com as propostas aprovadas · " + metric(count),
         "Final verificada · " + (evaluation.final_verified_ids ? metric(evaluation.final_verified_ids.length) : "Aguardando nova medição"),
         "", "### Já atende", ...existing.map(m => m.title + " · #" + m.id + " · " + m.severity),

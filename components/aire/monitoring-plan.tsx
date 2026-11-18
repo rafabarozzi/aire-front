@@ -94,17 +94,17 @@ export function MonitoringPlan({
     <section className={styles.plan} aria-label="Plano de monitoramento">
       <header className={styles.planHero}>
         <span className={styles.planEyebrow}>Plano para {evaluation.data.manifest?.journey?.name || "esta jornada"}</span>
-        <h3>O que precisamos monitorar</h3>
-        <p>O AIRE encontrou mudanças concretas para detectar falhas e degradação da jornada. Veja quando cada regra dispara e sua severidade; a decisão fica registrada para a próxima etapa de implantação.</p>
+        <h3>Cobertura de monitoramento</h3>
+        <p>Veja quanto as propostas podem cobrir e escolha quais aprovar.</p>
         <div className={styles.planStats} aria-live="polite">
           <div><strong>{percentage(existing.size)}</strong><span>Inicial comprovada · {existing.size} de {risks.length} riscos mapeados</span></div>
-          <div><strong>{percentage(projected.length)}</strong><span>Projetada com a seleção · {projected.length} de {risks.length}</span></div>
+          <div><strong>{percentage(demonstrable.length)}</strong><span>Projetada com todas as propostas · {demonstrable.length} de {risks.length} riscos</span></div>
           <div><strong>{evaluation.final_verified_ids ? percentage(evaluation.final_verified_ids.length) : "Pendente"}</strong><span>Final verificada · nova medição no ambiente</span></div>
         </div>
-        <p className={styles.planBoundary}>Cada risco conta uma vez. O percentual inicial mede o mínimo comprovado no inventário consultado. A projeção inclui propostas selecionadas ou aprovadas com evidência de teste. Nesta revisão a publicação está desabilitada.</p>
+        <p className={styles.planBoundary}>A projeção inclui a cobertura existente e todos os riscos com proposta testada. A cobertura final depende de uma nova medição após a implantação.</p>
       </header>
-      {risks.length > 0 && <details className={styles.planCard}><summary>Riscos da jornada · {risks.length - projected.length} sem cobertura demonstrada pela seleção</summary>
-        {risks.map(r => <p key={r.id}><strong>{r.title}</strong> {r.role} · {existing.has(r.id) ? "Monitor existente" : r.proposals.some(id => included.has(id)) ? "Incluído na projeção" : "Sem cobertura demonstrada pela seleção"}</p>)}</details>}
+      {risks.length > 0 && <details className={styles.planCard}><summary>Riscos da jornada · {risks.length - demonstrable.length} ainda sem cobertura demonstrada</summary>
+        {risks.map(r => <p key={r.id}><strong>{r.title}</strong> {r.role} · {existing.has(r.id) ? "Monitor existente" : r.proposals.length ? "Cobertura projetada pelo plano" : "Em investigação"}</p>)}</details>}
       {plan.source_window?.status === "invalid_evidence" && <aside className={styles.planCard} role="status"><p>{plan.source_window.reason}</p></aside>}
       {plan.experiments?.cases?.length && !plan.source_window ? <MonitoringExperimentsPanel evidence={plan.experiments} /> : null}
       <div className={styles.planSectionHeading}><h4>Já atende</h4></div>
@@ -144,7 +144,7 @@ export function MonitoringPlan({
         );
       })}</section>})}
       {canReview && available.length > 0 && <div className={styles.planCard}>
-        <p>{chosen.length} mudanças selecionadas · cobertura projetada {percentage(projected.length)}</p>
+        <p aria-live="polite">{chosen.length} selecionadas · {approved.length} aprovadas · cobertura com essas mudanças {percentage(projected.length)} ({projected.length} de {risks.length})</p>
         <div className="obs-actions"><button className="button secondary" disabled={!!busy} onClick={() => selectGroup(available.map(p => p.id))}>Selecionar todas</button>
         <button className="button primary" disabled={!!busy || !chosen.length} onClick={approveBatch}>Aprovar selecionadas ({chosen.length})</button></div>
       </div>}

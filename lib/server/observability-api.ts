@@ -12,7 +12,8 @@ import { z } from "zod";
 import { AppError, type Tenant } from "./config.ts";
 import { context } from "./session.ts";
 import { boundedBody, engine } from "./upstream.ts";
-import { getJourney, listJourneys, journeyHistory } from "./store.ts";
+import { getJourney, listAnalyses } from "./store.ts";
+import { latestJourneys, journeyKey } from "../aire/journey-identity.ts";
 import {
   readObservabilityPolicy,
   saveObservabilityPolicy,
@@ -224,16 +225,17 @@ export async function observabilityApi(
         u.searchParams.get("page") || 1,
       ),
       q = (u.searchParams.get("q") || "").slice(0, 200).toLowerCase();
-    const journeys = (await listJourneys(c.tenant.id)).filter(
+    const analyses = await listAnalyses(c.tenant.id);
+    const journeys = latestJourneys(analyses).filter(
       (j) =>
         j.name.toLowerCase().includes(q) ||
         j.repository.toLowerCase().includes(q),
     );
-    const items = [];
-    for (const j of journeys.slice((page - 1) * 5, page * 5)) {
+    const items = await Promise.all(journeys.slice((page - 1) * 5, page * 5).map(async j => {
       const evaluations: ReadinessEvaluation[] = [];
       const errors: string[] = [];
-      for (const version of await journeyHistory(c.tenant.id, j)) {
+      const key = journeyKey(j);
+      for (const version of analyses.filter(a => journeyKey(a) === key)) {
         if (version.status !== "COMPLETED") continue;
         try {
           const found = await (
@@ -255,14 +257,14 @@ export async function observabilityApi(
       evaluations.sort((a, b) =>
         (b.created_at || "").localeCompare(a.created_at || ""),
       );
-      items.push({
+      return {
         journey: j,
         evaluations,
         error: errors.length
           ? "Não foi possível consultar todas as avaliações desta jornada."
           : null,
-      });
-    }
+      };
+    }));
     return { items, total: journeys.length, page, pageSize: 5 };
   }
   if (path[1] !== "journeys" || !z.string().uuid().safeParse(path[2]).success)
@@ -337,6 +339,7 @@ export async function observabilityApi(
       if (selected && !z.string().uuid().safeParse(selected).success)
         throw new AppError(404, "not_found", "Avaliação não encontrada.");
       const query = new URLSearchParams({ view: "selected" });
+      if (params.get("compact") === "1") query.set("compact", "1");
       if (selected) query.set("selected", selected);
       const result: { history: Pick<ReadinessEvaluation, "id" | "state" | "created_at">[]; evaluation: ReadinessEvaluation | null } = await (await engine(c.tenant, base + "?" + query, { headers })).json();
       if (result.evaluation)
