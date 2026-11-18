@@ -354,7 +354,14 @@ export type SourceWindowReview = {
   max_age_seconds?: number; threshold?: number; target_status?: string;
   limitation?: string; provider_checks?: {metric: string; status: string}[];
 };
+export type JourneyAssessment = {
+  risks: {id:string; title:string; proposals:string[]; role:string}[];
+  existing: {id:number; title:string; trigger:string; severity:string; risks:string[]}[];
+  gaps: {component:string; operation:string; signal:string; role:string; title:string; remedy:string}[];
+};
 export type ReadinessEvaluation = {
+  final_verified_ids?: string[];
+  deployment_tags?: Record<string,string> | null;
   plan_decisions?: PlanDecisions;
   plan_reviewable?: boolean;
   customer_review?: CustomerReview;
@@ -376,6 +383,8 @@ export type ReadinessEvaluation = {
     pause_reason?: string;
     read_only?: boolean;
     entry_monitoring?: EntryMonitoring;
+    assessment?: JourneyAssessment;
+    journey_tags?: Record<string,string>;
     monitor_plan?: {proposals: PlanProposal[]; gaps: string[]; tier: string; coverage?: MonitoringCoverage; experiments?: MonitoringExperiments; source_window?: SourceWindowReview};
     customer_recommendations?: CustomerRecommendation[];
     recommendations: ReadinessRecommendation[];

@@ -140,8 +140,27 @@ export function customerReport(
   }
   if (data.monitor_plan) {
     lines.push("", "## Plano de monitoramento", "");
+    const assessment = data.assessment;
+    if (assessment) {
+      const { risks, existing, gaps } = assessment;
+      const base = new Set(existing.flatMap(m => m.risks));
+      const approved = new Set(data.monitor_plan.proposals.filter(p => {
+        const choice = evaluation.plan_decisions?.[p.id];
+        return choice?.version === p.version && choice.choice === "approved";
+      }).map(p => p.id));
+      const count = risks.filter(r => base.has(r.id) || r.proposals.some(id => approved.has(id))).length;
+      const metric = (n:number) => risks.length ? Math.round(100 * n / risks.length) + "% (" + n + "/" + risks.length + ")" : "Indisponível";
+      lines.push("Cobertura inicial comprovada · " + metric(base.size),
+        "Projetada com as propostas aprovadas · " + metric(count),
+        "Final verificada · " + (evaluation.final_verified_ids ? metric(evaluation.final_verified_ids.length) : "Aguardando nova medição"),
+        "", "### Já atende", ...existing.map(m => m.title + " · #" + m.id + " · " + m.severity),
+        ...(existing.length ? [] : ["Nenhuma cobertura comprovada no inventário consultado."]),
+        "Ajustar · " + data.monitor_plan.proposals.filter(p => p.action === "adjust").length,
+        "Criar · " + data.monitor_plan.proposals.filter(p => p.action === "create").length);
+      appendix.push("### Gaps de telemetria", ...gaps.map(g => g.component + " · " + g.operation + " · " + g.title + " · " + g.signal + ". " + g.remedy));
+    }
     const summary = data.monitor_plan.coverage?.summary;
-    if (summary) lines.push(
+    if (summary && !assessment) lines.push(
       data.monitor_plan.source_window ? `${data.monitor_plan.proposals.length} propostas para decisão. A contagem histórica de cobertura será recalculada para a versão corrigida do detector.` : `${data.monitor_plan.proposals.length} propostas para decisão. A cobertura ainda está em validação: ${summary.validated_in_replay} de ${summary.identified} necessidades comprovadas no Lab; ${summary.investigating} pendentes.`,
       "As propostas abaixo descrevem o que será implantado. Aprovação registrada não significa monitor ativo.",
       "",

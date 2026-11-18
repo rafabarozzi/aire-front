@@ -139,7 +139,7 @@ export async function observabilityApi(
         : "readiness:read"
       : ["policy", "catalog"].includes(path[1])
         ? "readiness:configure"
-        : path[3] === "preferences" || ["accept", "decision", "plan-decision"].includes(path[5])
+        : path[3] === "preferences" || ["accept", "decision", "plan-decision", "plan-batch", "deployment-tags"].includes(path[5])
           ? "readiness:approve"
           : path[5] === "execute"
             ? "readiness:execute"
@@ -348,6 +348,17 @@ export async function observabilityApi(
       await engine(c.tenant, panel ? base + "?view=panel" : base, { headers })
     ).json();
     return Promise.all(list.map((row) => withCustomerReview(c.tenant.id, row)));
+  }
+  if (method === "POST" && evaluation && (action === "plan-batch" || action === "deployment-tags")) {
+    const payload = action === "plan-batch"
+      ? checked(z.object({selections: z.array(z.object({proposal:z.string().min(1).max(128),version:z.string().regex(/^[0-9a-f]{64}$/)})).min(1).max(250)}).strict(), await body())
+      : checked(z.object({tags:z.record(z.string(),z.string().max(100))}).strict(), await body());
+    const response = await engine(c.tenant, base + "/" + action, {
+      method, headers, body: JSON.stringify({...payload, analysis_id:j.id}),
+    }, [403,404,409,422]);
+    if (!response.ok) throw new AppError(response.status, "decision_unavailable",
+      response.status === 422 ? "Confira as tags obrigatórias e seus valores." : "Atualize o plano e confira a decisão desta versão.");
+    return response.json();
   }
   if (method === "POST" && action === "plan-decision" && evaluation) {
     const selection = checked(z.object({
