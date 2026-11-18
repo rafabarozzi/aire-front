@@ -198,10 +198,11 @@ export function customerReport(
     }
     const coverage = data.monitor_plan.coverage;
     if (coverage) {
+      const demonstrable = new Set(assessment?.risks.filter(r => r.proposals.length || assessment.existing.some(m => m.risks.includes(r.id))).map(r => r.id));
       appendix.push("Cobertura ainda em validação.",
-        sourceWindow ? "A contagem histórica de cobertura será recalculada para a versão corrigida do detector." : `${coverage.summary.identified} necessidades inferidas do manifesto; ${coverage.summary.validated_in_replay} condições satisfeitas em replay no Lab; ${coverage.summary.investigating} sem detecção comprovada.`,
+        assessment ? `Com todas as propostas, há evidência de teste para ${demonstrable.size} de ${assessment.risks.length} riscos.` : sourceWindow ? "A contagem histórica de cobertura será recalculada para a versão corrigida do detector." : `${coverage.summary.identified} necessidades inferidas do manifesto; ${coverage.summary.validated_in_replay} condições satisfeitas em replay no Lab; ${coverage.summary.investigating} sem detecção comprovada.`,
         coverage.calibration.reason || "Baseline ainda insuficiente.", coverage.limitation, "");
-      for (const r of coverage.requirements.filter(r => r.status === "investigating")) {
+      for (const r of coverage.requirements.filter(r => assessment ? !demonstrable.has(r.id) : r.status === "investigating")) {
         appendix.push(`- ${r.title}: ${r.reason}`);
         if (r.acceptance) appendix.push(`  Evidência necessária: ${r.acceptance}`);
       }

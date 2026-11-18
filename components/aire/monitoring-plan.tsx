@@ -38,6 +38,7 @@ export function MonitoringPlan({
   const included = new Set([...approved, ...chosen].map(p => p.id));
   const existing = new Set(assessment?.existing.flatMap(m => m.risks));
   const risks = assessment?.risks ?? [];
+  const demonstrable = risks.filter(r => existing.has(r.id) || r.proposals.length > 0);
   const projected = risks.filter(r => existing.has(r.id) || r.proposals.some(id => included.has(id)));
   const percentage = (count:number) => risks.length ? Math.round(100 * count / risks.length) + "%" : "Indisponível";
   const policy = evaluation.data.policy_context?.policy.tags;
@@ -116,6 +117,7 @@ export function MonitoringPlan({
           {!group.length && <p>Nenhuma mudança desse tipo pronta para aprovação.</p>}
           {canReview && group.some(p => available.includes(p)) && <button type="button" className="button secondary" disabled={!!busy} onClick={() => selectGroup(group.filter(p => available.includes(p)).map(p => p.id))}>Selecionar grupo</button>}
           {group.map(p => {
+        const linkedRisks = risks.filter(r => r.proposals.includes(p.id));
         const saved = decisions[p.id];
         const decided = saved?.version === p.version;
         const pendingTarget = p.application_status === "awaiting_target_validation";
@@ -129,6 +131,8 @@ export function MonitoringPlan({
             <h4>{p.title}</h4>
             {p.benefit && <p>{p.benefit}</p>}
             <p className={styles.planTrigger}><strong>Quando dispara</strong><span>{p.trigger}</span></p>
+            {linkedRisks.length > 0 && <details><summary>Riscos cobertos por esta proposta ({linkedRisks.length})</summary>
+              <ul>{linkedRisks.map(r => <li key={r.id}>{r.title}</li>)}</ul></details>}
             {p.before && <p><strong>Situação atual</strong> · {p.before}</p>}
             <details><summary>Como o AIRE chegou a esta recomendação</summary><p>{p.validation}</p><p>{p.reason}</p></details>
             <details><summary>O que falta antes de ativar</summary><p>{p.safeguards}</p>{p.setup && <ol>{p.setup.steps.map(step => <li key={step}>{step}</li>)}</ol>}</details>
@@ -158,7 +162,7 @@ export function MonitoringPlan({
         {assessment.gaps.map((g,i) => <div key={i}><h5>{g.component} · {g.operation} {g.role}</h5><p>{g.title} · {g.signal}. {g.remedy}</p></div>)}</details>}
 
       {plan.source_window?.status === "lab_validated" && <aside className={styles.planCard} aria-label="Validade dos dados da jornada">
-        <h4>O que aprendemos sobre o valor usado no Checkout</h4>
+        <h4>Validade dos dados usados na jornada</h4>
         <p>O código permite manter o valor em cache por até {plan.source_window.max_age_seconds} segundos. O detector anterior poderia alertar durante uma atualização legítima.</p>
         <p><strong>{plan.source_window.healthy_controls} controles saudáveis sem alerta</strong> · {plan.source_window.stale_detected} valores vencidos detectados · recuperação conferida no Datadog.</p>
         <p>{plan.source_window.limitation}</p>
@@ -168,7 +172,7 @@ export function MonitoringPlan({
           <summary>O que o AIRE ainda precisa comprovar</summary>
           <h4>Validação da cobertura da jornada</h4>
           <p>
-            {plan.source_window ? "A contagem histórica de cobertura será recalculada para a versão corrigida do detector." : <>{plan.coverage.summary.identified} necessidades de detecção inferidas do manifesto. {" "}{plan.coverage.summary.validated_in_replay} com condição satisfeita em replay no Lab; {" "}{plan.coverage.summary.investigating} ainda sem detecção comprovada.</>}
+            {assessment ? <>Com todas as propostas, há evidência de teste para {demonstrable.length} dos {risks.length} riscos. Restam {risks.length - demonstrable.length} em investigação.</> : plan.source_window ? "Cobertura da nova versão em validação." : <>{plan.coverage.summary.identified} necessidades de detecção inferidas do manifesto. {" "}{plan.coverage.summary.validated_in_replay} com condição satisfeita em replay no Lab; {" "}{plan.coverage.summary.investigating} ainda sem detecção comprovada.</>}
           </p>
           <p>A jornada ainda não tem cobertura completa demonstrada. As pendências de investigação ficam com o AIRE; somente mudanças com evidência de detecção aparecem para decisão.</p>
           <p>{plan.coverage.calibration.reason}</p>
@@ -180,7 +184,7 @@ export function MonitoringPlan({
           ))}
           <details>
             <summary>O que falta demonstrar</summary>
-            {plan.coverage.requirements.filter(r => r.status === "investigating").map(r => (
+            {plan.coverage.requirements.filter(r => assessment ? !demonstrable.some(d => d.id === r.id) : r.status === "investigating").map(r => (
               <div key={r.id}><h5>{r.title}</h5><p>{r.reason}</p>
                 {r.acceptance && <p><strong>Para comprovar a detecção</strong> · {r.acceptance}</p>}
               </div>
