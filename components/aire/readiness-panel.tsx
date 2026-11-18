@@ -54,6 +54,8 @@ export function ReadinessPanel({
     [report, setReport] = useState("");
   const [catalog, setCatalog] = useState<CatalogRecord>();
   const [teamId, setTeamId] = useState("");
+  const [responses, setResponses] = useState<Record<string, ResponseSelection>>({});
+  const [bulk, setBulk] = useState<ResponseSelection>(emptyResponseSelection());
   const refresh = useCallback(async () => {
     const generation = ++requestGeneration.current;
     const query = new URLSearchParams({ view: "selected" });
