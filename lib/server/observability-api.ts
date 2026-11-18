@@ -338,7 +338,7 @@ export async function observabilityApi(
         throw new AppError(404, "not_found", "Avaliação não encontrada.");
       const query = new URLSearchParams({ view: "selected" });
       if (selected) query.set("selected", selected);
-      const result = await (await engine(c.tenant, base + "?" + query, { headers })).json();
+      const result: { history: Pick<ReadinessEvaluation, "id" | "state" | "created_at">[]; evaluation: ReadinessEvaluation | null } = await (await engine(c.tenant, base + "?" + query, { headers })).json();
       if (result.evaluation)
         result.evaluation = await withCustomerReview(c.tenant.id, result.evaluation);
       return result;
