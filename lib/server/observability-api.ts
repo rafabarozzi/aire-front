@@ -331,6 +331,18 @@ export async function observabilityApi(
   }
   if (method === "GET" && !action) {
     if (evaluation) return withCustomerReview(c.tenant.id, evaluation);
+    const params = new URL(request.url).searchParams;
+    if (params.get("view") === "selected") {
+      const selected = params.get("selected");
+      if (selected && !z.string().uuid().safeParse(selected).success)
+        throw new AppError(404, "not_found", "Avaliação não encontrada.");
+      const query = new URLSearchParams({ view: "selected" });
+      if (selected) query.set("selected", selected);
+      const result = await (await engine(c.tenant, base + "?" + query, { headers })).json();
+      if (result.evaluation)
+        result.evaluation = await withCustomerReview(c.tenant.id, result.evaluation);
+      return result;
+    }
     const panel = new URL(request.url).searchParams.get("view") === "panel";
     const list: ReadinessEvaluation[] = await (
       await engine(c.tenant, panel ? base + "?view=panel" : base, { headers })
