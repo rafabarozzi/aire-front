@@ -1,3 +1,4 @@
+import { connectionReferences } from "./connection-references.ts";
 import { checkRepositoryHealth, repositoryHealth } from "./repository-health.ts";
 import { z } from "zod";
 import {
@@ -46,8 +47,16 @@ export async function connectionsApi(
       request.method === "GET" &&
       (c.permissions.includes("connections:read") ||
         c.permissions.includes("connections:manage"))
-    )
-      return integrationView(c.tenant);
+    ) {
+      const [views, references] = await Promise.all([
+        integrationView(c.tenant), connectionReferences(c.tenant),
+      ]);
+      return views.map(view => ({
+        ...view,
+        reference: !view.revision && (view.provider === "github" || view.provider === "datadog")
+          ? references[view.provider] : undefined,
+      }));
+    }
     if (!c.permissions.includes("connections:manage"))
       throw new AppError(
         403,

@@ -181,7 +181,14 @@ export async function evolution(tenant: string) {
     string,
     { month: string; analyses: number; completed: number; failed: number }
   >();
+  const dailyAnalyses: Record<string, number> = {};
+  const tiers = { Gold: 0, Silver: 0, Bronze: 0 };
+  for (const j of current) {
+    if (Object.hasOwn(tiers, j.tier)) tiers[j.tier]++;
+  }
   for (const j of all) {
+    const day = j.createdAt.slice(0, 10);
+    dailyAnalyses[day] = (dailyAnalyses[day] || 0) + 1;
     const month = j.createdAt.slice(0, 7),
       row = months.get(month) || {
         month,
@@ -195,6 +202,8 @@ export async function evolution(tenant: string) {
     months.set(month, row);
   }
   return {
+    tiers,
+    dailyAnalyses,
     uniqueJourneys: current.length,
     completedJourneys: current.filter((j) => j.status === "COMPLETED").length,
     analyses: all.length,

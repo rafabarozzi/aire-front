@@ -1,4 +1,5 @@
 import { observabilityApi } from "./observability-api.ts";
+import { withTechnologies } from "./journey-technologies.ts";
 import { readinessApi } from "./readiness-api.ts";
 import { z } from "zod";
 import { AppError } from "./config.ts";
@@ -233,7 +234,7 @@ async function handleApi(request: Request, path: string[]) {
     if (path[0] === "journeys" && path.length === 1) {
       if (request.method === "GET") {
         const c = await context(request, "journeys:read");
-        return json(await listJourneys(c.tenant.id));
+        return json(await withTechnologies(c.tenant, await listJourneys(c.tenant.id)));
       }
       if (request.method === "POST") {
         const c = await context(request, "journeys:create");
@@ -424,7 +425,7 @@ async function handleApi(request: Request, path: string[]) {
         path[2] === "history" &&
         path.length === 3
       )
-        return json(await journeyHistory(c.tenant.id, j));
+        return json(await withTechnologies(c.tenant, await journeyHistory(c.tenant.id, j)));
       if (request.method === "GET" && path.length === 2) {
         const state = engineState.parse(
           await (await engine(c.tenant, `/v1/analyses/${j.id}`)).json(),
@@ -433,7 +434,7 @@ async function handleApi(request: Request, path: string[]) {
           state.status in statusLabels ? state.status : j.status;
         const updated = { ...j, status };
         await saveJourney(c.tenant.id, updated);
-        return json(updated);
+        return json((await withTechnologies(c.tenant, [updated]))[0]);
       }
       if (
         request.method === "GET" &&

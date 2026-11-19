@@ -226,6 +226,7 @@ test("legacy duplicates collapse without deleting history; endpoint method and s
     second = {
       ...job("22222222-2222-4222-8222-222222222222", "2026-11-02T10:00:00Z"),
       name: "Renamed",
+      tier: "Silver" as const,
       revision: "b".repeat(40),
       repository: "ORG/REPO",
     };
@@ -243,8 +244,12 @@ test("legacy duplicates collapse without deleting history; endpoint method and s
     endpoint: "GET /checkout",
   });
   assert.equal((await listJourneys("lab")).length, 3);
-  assert.equal((await evolution("lab")).reanalyses, 1);
-  assert.equal((await evolution("lab")).outcomes.hoursSaved, null);
+  const summary = await evolution("lab");
+  assert.equal(summary.reanalyses, 1);
+  assert.equal(summary.outcomes.hoursSaved, null);
+  assert.deepEqual(summary.tiers, { Gold: 2, Silver: 1, Bronze: 0 });
+  assert.deepEqual(summary.dailyAnalyses, { "2026-11-01": 3, "2026-11-02": 1 });
+  assert.deepEqual((await evolution("other")).dailyAnalyses, {});
   assert.deepEqual(await listJourneys("other"), []);
 });
 test("same revision reused before upstream calls and durable preparation lock rejects competing requests", async () => {

@@ -2,6 +2,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { request } from "@/lib/aire/client";
 import { OnboardingAdmin } from "./onboarding-admin";
+import { EvolutionDashboard, type EvolutionData } from "./evolution-dashboard";
 import { LogoutButton } from "./logout-button";
 import type { Session, Journey } from "@/lib/aire/types";
 import type { Tenant } from "@/lib/server/config";
@@ -84,21 +85,7 @@ export function EnterpriseConsole({
       usage: Usage | null;
     }>;
   } | null>(null);
-  const [evolution, setEvolution] = useState<{
-    uniqueJourneys: number;
-    completedJourneys: number;
-    analyses: number;
-    reanalyses: number;
-    repositories: number;
-    firstAnalysisAt: string | null;
-    measurement: string;
-    months: Array<{
-      month: string;
-      analyses: number;
-      completed: number;
-      failed: number;
-    }>;
-  } | null>(null);
+  const [evolution, setEvolution] = useState<EvolutionData | null>(null);
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   async function load() {
     if (mode === "platform") {
@@ -288,7 +275,7 @@ export function EnterpriseConsole({
             : mode === "collectors"
               ? "Colete código autorizado na rede do cliente. O processamento acontece no Atlas."
               : mode === "evolution"
-                ? "Acompanhe a adoção, as reanálises e os resultados medidos no seu ambiente."
+                ? "Histórico de mapeamentos e criticidade das jornadas deste workspace."
                 : "Acompanhe o uso de IA da sua organização no mês atual."}
         </p>
         {error && (
@@ -313,60 +300,12 @@ export function EnterpriseConsole({
           </div>
         ) : (
           <>
-            {mode === "evolution" && evolution && (
-              <section className="panel enterprise-section">
-                <h2>Base de evolução</h2>
-                <div className="enterprise-metrics">
-                  {[
-                    ["Jornadas únicas", evolution.uniqueJourneys],
-                    [
-                      "Análises concluídas (versão atual)",
-                      evolution.completedJourneys,
-                    ],
-                    ["Reanálises preservadas", evolution.reanalyses],
-                    ["Repositórios mapeados", evolution.repositories],
-                  ].map(([label, value]) => (
-                    <div key={label}>
-                      <small>{label}</small>
-                      <strong>{value}</strong>
-                    </div>
-                  ))}
-                </div>
-                <p>{evolution.measurement}</p>
-                <div className="enterprise-table">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Mês de criação</th>
-                        <th>Análises</th>
-                        <th>Concluídas</th>
-                        <th>Falharam</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {evolution.months.map((m) => (
-                        <tr key={m.month}>
-                          <td>{m.month}</td>
-                          <td>{m.analyses}</td>
-                          <td>{m.completed}</td>
-                          <td>{m.failed}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                {!evolution.analyses && (
-                  <p>Mapeie a primeira jornada para iniciar a linha de base.</p>
-                )}
-                <h3>Resultados operacionais</h3>
-                <p>
-                  Alertas criados, alertas ajustados, horas poupadas e retorno
-                  financeiro: ainda não medidos. O histórico de análises já é
-                  preservado; sugestões só contarão como resultado após
-                  aplicação comprovada.
-                </p>
-              </section>
-            )}
+            {mode === "evolution" &&
+              (evolution ? (
+                <EvolutionDashboard data={evolution} />
+              ) : (
+                !error && <p role="status">Carregando indicadores…</p>
+              ))}
             {mode === "platform" && (
               <>
                 <section className="panel enterprise-section">

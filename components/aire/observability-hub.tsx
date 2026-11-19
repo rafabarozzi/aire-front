@@ -3,7 +3,10 @@ import { useCallback, useEffect, useState } from "react";
 import { Activity, RefreshCw, Settings2, Search } from "lucide-react";
 import { request } from "@/lib/aire/client";
 import type { Journey, Session } from "@/lib/aire/types";
-import type { ReadinessEvaluation } from "@/lib/aire/observability";
+import {
+  evaluationLabel,
+  type ReadinessEvaluation,
+} from "@/lib/aire/observability";
 import { OperationalCatalogEditor } from "./operational-catalog";
 import { ObservabilityPolicyEditor } from "./observability-policy";
 import { ReadinessPanel } from "./readiness-panel";
@@ -32,7 +35,11 @@ export function ObservabilityHub({
     [page, setPage] = useState(1),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
-    [selected, setSelected] = useState<{ analysis: string; name: string }>();
+    [selected, setSelected] = useState<{
+      analysis: string;
+      name: string;
+      evaluation?: string;
+    }>();
   const refresh = useCallback(async () => {
     if (demo) return;
     setBusy(true);
@@ -40,7 +47,7 @@ export function ObservabilityHub({
     try {
       setData(
         await request<Result>(
-          `observability/journeys?page=${page}&q=${encodeURIComponent(search)}`,
+          `observability/journeys?view=summary&page=${page}&q=${encodeURIComponent(search)}`,
         ),
       );
     } catch (e) {
@@ -116,6 +123,7 @@ export function ObservabilityHub({
           <ReadinessPanel
             key={selected.analysis}
             analysisId={selected.analysis}
+            initialEvaluationId={selected.evaluation}
           />
         </>
       ) : (
@@ -186,6 +194,7 @@ export function ObservabilityHub({
                         onClick={() =>
                           setSelected({
                             analysis: e.analysis || j.id,
+                            evaluation: e.id,
                             name: j.name,
                           })
                         }
@@ -193,10 +202,10 @@ export function ObservabilityHub({
                         {e.created_at
                           ? new Date(e.created_at).toLocaleString("pt-BR")
                           : e.id}{" "}
-                        · {e.state} ·{" "}
+                        · {evaluationLabel(e.state)} ·{" "}
                         {e.data.input.mode === "simulation"
                           ? "Simulação"
-                          : "Real"}
+                          : e.data.input.environment || "Telemetria"}
                       </button>
                     ))}
                   </details>

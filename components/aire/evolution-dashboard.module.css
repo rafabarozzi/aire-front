@@ -1,0 +1,388 @@
+.dashboard,
+.empty {
+  margin-top: 26px;
+  font-variant-numeric: tabular-nums;
+}
+.dashboard {
+  display: grid;
+  gap: 16px;
+}
+.overview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 24px 40px;
+  padding: clamp(24px, 3.2vw, 42px);
+  border-radius: 18px;
+  background:
+    radial-gradient(ellipse at 100% 0, #21586b 0, transparent 58%),
+    linear-gradient(115deg, #102641, #193e60);
+  color: #fff;
+}
+.overview h2,
+.overview h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: #fff;
+}
+.overview p {
+  margin-top: 5px;
+  font-size: 13px;
+  color: #c1d4e5;
+}
+.heroNumber {
+  display: block;
+  margin: 3px 0;
+  font-size: clamp(48px, 5vw, 66px);
+  line-height: 1.05;
+  font-weight: 620;
+  letter-spacing: -0.07em;
+}
+.completion {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+.ring {
+  flex: none;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+.ring strong {
+  width: 80px;
+  height: 80px;
+  border-radius: inherit;
+  display: grid;
+  place-items: center;
+  background: #1a4057;
+  font-size: 24px;
+  letter-spacing: -0.05em;
+}
+.metrics,
+.panels {
+  display: grid;
+  gap: 16px;
+}
+.metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.metric,
+.panel,
+.history,
+.empty {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+}
+.metric {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 22px;
+  color: var(--subtle);
+  font-size: 13px;
+}
+.metric strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 27px;
+  line-height: 1.15;
+  letter-spacing: -0.04em;
+  font-weight: 620;
+  color: var(--ink);
+}
+.icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--blue-light);
+  color: var(--blue);
+}
+.panels {
+  grid-template-columns: minmax(0, 1.85fr) minmax(260px, 1fr);
+}
+.panel {
+  min-width: 0;
+  padding: clamp(18px, 2.2vw, 28px);
+}
+.panel h2,
+.empty h2 {
+  margin: 0;
+  font-size: 18px;
+}
+.panelHeading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.select {
+  max-width: 100%;
+  min-height: 38px;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+.panel .description,
+.monthTotal,
+.outcomes p {
+  color: var(--subtle);
+  font-size: 13px;
+}
+.monthTotal {
+  margin: 10px 0 24px;
+}
+.monthTotal strong {
+  margin-right: 4px;
+  color: var(--ink);
+  font-size: 22px;
+}
+.plot {
+  position: relative;
+  height: 140px;
+  margin: 0 2px 42px 32px;
+}
+.lines,
+.columns {
+  position: absolute;
+  inset: 0;
+  display: flex;
+}
+.lines {
+  flex-direction: column;
+  justify-content: space-between;
+}
+.lines > div {
+  position: relative;
+  border-top: 1px dashed var(--border);
+}
+.lines span {
+  position: absolute;
+  right: calc(100% + 8px);
+  top: -9px;
+  font-size: 11px;
+  color: var(--subtle);
+}
+.columns {
+  align-items: end;
+  gap: 2px;
+}
+.column {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  position: relative;
+  display: flex;
+  align-items: end;
+  justify-content: center;
+}
+.bar {
+  display: block;
+  width: 68%;
+  max-width: 54px;
+  border-radius: 5px 5px 0 0;
+  background: linear-gradient(0deg, #294bb7, #4283e1);
+}
+.column small {
+  position: absolute;
+  top: calc(100% + 6px);
+  color: var(--subtle);
+  font-size: 11px;
+}
+.chartFooter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  color: var(--subtle);
+  font-size: 12px;
+}
+.chartFooter span,
+.tierList dt {
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+}
+.chartFooter i,
+.tierList i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.chartFooter b {
+  color: var(--ink);
+}
+.completeDot {
+  background: #23856b;
+}
+.failedDot {
+  background: #d45b50;
+}
+.otherDot {
+  background: #92a1b6;
+}
+.tierBar {
+  display: flex;
+  height: 15px;
+  border-radius: 5px;
+  overflow: hidden;
+  background: var(--border);
+  margin: 28px 0 14px;
+}
+.Gold {
+  background: #d8a742;
+}
+.Silver {
+  background: #7990af;
+}
+.Bronze {
+  background: #b67152;
+}
+.tierList {
+  margin: 0;
+}
+.tierList > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+.tierList > div:last-child {
+  border-bottom: 0;
+}
+.tierList dd {
+  margin: 0;
+  font-weight: 650;
+  color: var(--ink);
+}
+.history summary {
+  padding: 17px 22px;
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--ink);
+}
+.history summary:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 3px;
+  border-radius: 14px;
+}
+.tableScroll {
+  overflow-x: auto;
+  padding: 0 22px 16px;
+}
+.history table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  text-align: left;
+}
+.history th,
+.history td {
+  border-top: 1px solid var(--border);
+  padding: 10px 8px;
+  text-align: right;
+}
+.history th:first-child {
+  text-align: left;
+}
+.outcomes {
+  display: flex;
+  gap: 12px;
+  align-items: start;
+  color: var(--subtle);
+  padding: 8px;
+}
+.outcomes svg {
+  flex: none;
+  margin-top: 2px;
+}
+.outcomes h3 {
+  font-size: 14px;
+}
+.empty {
+  padding: 40px;
+}
+.empty svg {
+  color: var(--blue);
+}
+.empty h2 {
+  margin: 12px 0 4px;
+}
+.empty a {
+  margin-top: 20px;
+}
+@media (max-width: 780px) {
+  .panels {
+    grid-template-columns: 1fr;
+  }
+  .metric {
+    padding: 14px;
+    gap: 10px;
+  }
+  .ring {
+    width: 78px;
+    height: 78px;
+  }
+  .ring strong {
+    width: 64px;
+    height: 64px;
+    font-size: 18px;
+  }
+}
+@media (max-width: 580px) {
+  .overview {
+    align-items: start;
+    flex-direction: column;
+  }
+  .completion {
+    border-top: 1px solid #527189;
+    width: 100%;
+    padding-top: 16px;
+    gap: 14px;
+  }
+  .metrics {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .metric > div {
+    flex: 1;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+  .metric strong {
+    font-size: 20px;
+    margin: 0;
+  }
+  .metric .icon {
+    width: 32px;
+    height: 32px;
+  }
+  .plot {
+    margin-left: 26px;
+  }
+  .empty {
+    padding: 22px;
+  }
+}

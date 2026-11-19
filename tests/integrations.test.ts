@@ -1,6 +1,6 @@
 import test, { beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, rm, readFile, mkdir, copyFile } from "node:fs/promises";
+import { mkdtemp, rm, readFile, writeFile, mkdir, copyFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { generateKeyPairSync } from "node:crypto";
@@ -497,4 +497,35 @@ test("GitLab journey creation sends qualified source metadata to the engine and 
   const data = (await second.json()) as { reused: boolean; repository: string };
   assert.equal(data.reused, true);
   assert.equal(data.repository, repository);
+});
+
+test("review registration references are isolated, redacted and cannot provide credentials", async () => {
+  const observedAt = "2026-11-05T12:00:00.000Z";
+  const file = join(dir, "alpha", "connection-references.json");
+  await mkdir(join(dir, "alpha"), {recursive:true});
+  await writeFile(file, JSON.stringify({tenant:"alpha", observedAt, github:true, datadog:{engineReadBridge:true}}));
+  delete process.env.TEST_GITHUB;
+  let probes = 0;
+  globalThis.fetch = async (url, init) => {
+    assert.equal(String(url),"http://127.0.0.1:18088/v1/readiness/capabilities");
+    assert.equal(new Headers(init?.headers).get("X-AIRE-Tenant"),"alpha");
+    probes++;
+    return Response.json({modes:["real"], realRead:{ready:true, validation:{ready:true,privateValue:"never-reveal"}}});
+  };
+  type Row = {provider: string; configured: boolean; reference?: {observedAt: string; engineStatus?: string}};
+  const list = (await (await call("connections/integrations")).json()) as Row[];
+  assert.deepEqual(list.find(p=>p.provider==="github")?.reference,{observedAt});
+  const dd = list.find(p=>p.provider==="datadog");
+  assert.equal(dd?.configured,false);
+  assert.deepEqual(dd?.reference,{observedAt,engineStatus:"verified"});
+  assert.ok(!JSON.stringify(list).includes("never-reveal"));
+  assert.equal(await githubCredential(alpha),undefined);
+  const other = (await (await call("connections/integrations","GET",undefined,"bob")).json()) as Row[];
+  assert.ok(other.every(p=>!p.reference));
+  assert.equal(probes,1);
+  globalThis.fetch=async()=>{throw Error("offline")};
+  const offline = (await (await call("connections/integrations")).json()) as Row[];
+  assert.equal(offline.find(p=>p.provider==="datadog")?.reference?.engineStatus,"unavailable");
+  await writeFile(file,JSON.stringify({tenant:"beta",observedAt,github:true}));
+  assert.equal((await call("connections/integrations")).status,503);
 });

@@ -67,6 +67,7 @@ export type Journey = {
   evidence?: number;
   gaps?: number;
   stacks: string[];
+  stackEvidence?: "verified" | "unavailable";
   description?: string;
   demo?: boolean;
 };

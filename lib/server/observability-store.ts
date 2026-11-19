@@ -18,6 +18,8 @@ import { AppError } from "./config.ts";
 import {
   defaultObservabilityPolicy,
   policySchema,
+  type CustomerReview,
+  type CustomerDecision,
   type PolicyRecord,
   type ObservabilityPolicy,
 } from "../aire/observability.ts";
@@ -170,5 +172,45 @@ export function saveOperationalCatalog(
     { catalog: catalogSchema.parse(catalog) },
     actor,
     { revision: 0, catalog: emptyCatalog() },
+  );
+}
+
+export function readCustomerReview(tenant: string, evaluation: string) {
+  return read<CustomerReview>(tenant, `review-${evaluation}`, {
+    revision: 0,
+    decisions: {},
+  });
+}
+export async function saveCustomerDecision(
+  tenant: string,
+  evaluation: string,
+  id: string,
+  choice: CustomerDecision["choice"],
+  fingerprint: string,
+  revision: number,
+  actor: string,
+) {
+  const old = await readCustomerReview(tenant, evaluation);
+  const previous = old.decisions[id];
+  if (previous?.fingerprint === fingerprint && previous.choice === choice)
+    return old;
+  if (old.revision !== revision)
+    throw new AppError(
+      409,
+      "review_conflict",
+      "Há uma decisão mais recente. Atualize a avaliação.",
+    );
+  return save<CustomerReview>(
+    tenant,
+    `review-${evaluation}`,
+    revision,
+    {
+      decisions: {
+        ...old.decisions,
+        [id]: { choice, fingerprint, at: new Date().toISOString(), actor },
+      },
+    },
+    actor,
+    { revision: 0, decisions: {} },
   );
 }

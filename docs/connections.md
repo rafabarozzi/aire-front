@@ -58,3 +58,7 @@ A frente da Etapa 2 deve integrar esse módulo a um adaptador servidor-servidor 
 - [GitLab repository archives](https://docs.gitlab.com/api/repositories/)
 - [Datadog API e Application Keys](https://docs.datadoghq.com/account_management/api-app-keys/)
 - [Dynatrace API authentication](https://docs.dynatrace.com/docs/dynatrace-api/basics/dynatrace-api-authentication)
+
+### Referências na instância de revisão
+
+Quando uma revisão isolada usa a mesma organização e outra chave de proteção, o provisionador pode gravar `connection-references.json` no diretório do tenant. O registro contém apenas o ID do tenant, `observedAt` (UTC), o indicador opcional `github: true` e, para Datadog, o objeto opcional `datadog: { "engineReadBridge": true }`. Antes de declarar um vínculo, o provisionador verifica a identidade do tenant e a origem do bridge no motor. As referências exibem quando o cadastro foi conferido no portal principal. O status de leitura de Datadog vem das capacidades atuais do motor da própria organização. Cadastro, substituição ou remoção local têm precedência. A autenticação com provedores continua usando exclusivamente as fontes de credenciais configuradas para aquela instância.

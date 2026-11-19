@@ -28,6 +28,7 @@ type Connection = {
   provider: Provider;
   revision: number;
   configured: boolean;
+  reference?: { observedAt: string; engineStatus?: "verified" | "pending" | "unavailable" };
   needsReplacement?: boolean;
   kind?: string;
   site?: string;
@@ -539,10 +540,9 @@ export function ConnectionsPanel({
         <div className="connection-section-title">
           <div>
             <h2>Suas ferramentas</h2>
-            <p>Conecte as fontes que dão contexto às suas jornadas.</p>
           </div>
         </div>
-        {!connections.some((c) => c.configured) && !data?.githubConfigured && (
+        {!connections.some((c) => c.configured || c.reference) && !data?.githubConfigured && (
           <div className="connection-empty">
             <KeyRound size={24} />
             <h3>Comece conectando seu código</h3>
@@ -583,10 +583,9 @@ export function ConnectionsPanel({
               ).map((raw) => {
                 const p = raw as Provider,
                   c = connections.find((c) => c.provider === p),
-                  configured = c?.revision
-                    ? c.configured
-                    : p === "github" && data?.githubConfigured;
-                if (!showCatalog && !configured) return null;
+                  configured = !!(c?.configured || (p === "github" && data?.githubConfigured)),
+                  reference = configured ? undefined : c?.reference;
+                if (!showCatalog && !configured && !reference) return null;
                 return (
                   <article
                     className="panel provider-card integration-card"
@@ -596,13 +595,14 @@ export function ConnectionsPanel({
                       <ProviderLogo provider={p} />
                       <h3>{names[p]}</h3>
                       <span
-                        className={`badge connection-status ${c?.needsReplacement ? "needs-attention" : configured ? "is-saved" : "is-pending"}`}
+                        className={`badge connection-status ${c?.needsReplacement ? "needs-attention" : configured || reference?.engineStatus === "verified" ? "is-saved" : "is-pending"}`}
                       >
                         {c?.needsReplacement
                           ? "Substitua a credencial"
                           : configured
-                            ? "Credencial salva"
-                            : "A configurar"}
+                            ? (p === "github" && data?.credential?.source === "environment" ? "Configurada no ambiente" : "Credencial salva")
+                            : reference?.engineStatus === "verified" ? "Leitura validada"
+                            : reference ? "Portal principal" : "A configurar"}
                       </span>
                     </div>
                     <p>
@@ -616,6 +616,18 @@ export function ConnectionsPanel({
                             ? "API Key + Application Key"
                             : "Environment API Token · SaaS"}
                     </p>
+                    {reference && (
+                      <p>
+                        Cadastro no portal principal conferido em {new Date(reference.observedAt).toLocaleDateString("pt-BR")}.
+                        {" "}{reference.engineStatus === "verified"
+                          ? "A Etapa 2 usa esta conexão para leitura."
+                          : reference.engineStatus === "pending"
+                            ? "O motor usa a conexão do Lab e aguarda nova validação de leitura."
+                            : reference.engineStatus === "unavailable"
+                              ? "Estado de leitura do motor indisponível."
+                              : "A credencial é gerenciada na origem."}
+                      </p>
+                    )}
                     {manage && (
                       <div className="connection-toolbar provider-primary-actions">
                         <button
@@ -624,7 +636,7 @@ export function ConnectionsPanel({
                           onClick={() => open(p)}
                         >
                           <KeyRound size={16} />
-                          {configured ? "Gerenciar" : "Conectar"}
+                          {configured ? "Gerenciar" : reference ? "Configurar neste portal" : "Conectar"}
                         </button>
                         {category === "code" && configured && (
                           <button
