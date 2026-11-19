@@ -10,6 +10,14 @@ import type {
 import styles from "./customer-review.module.css";
 import { MonitoringExperimentsPanel } from "./monitoring-experiments";
 
+const riskFamilies: Record<string, string> = {
+  availability: "Acesso à jornada", errors: "Erros na entrada", latency: "Tempo de resposta",
+  latency_tail: "Lentidão em grupos de clientes", telemetry_freshness: "Continuidade da medição",
+  dependency_failure: "Falhas em dependências", result_integrity: "Resultado e conteúdo",
+  async_completion: "Trabalho assíncrono", freshness: "Atualidade dos dados",
+  conditional_paths: "Caminhos condicionais e recusas",
+};
+
 export function MonitoringPlan({
   evaluation,
   base,
@@ -40,6 +48,15 @@ export function MonitoringPlan({
   const risks = assessment?.risks ?? [];
   const demonstrable = risks.filter(r => existing.has(r.id) || r.proposals.length > 0);
   const projected = risks.filter(r => existing.has(r.id) || r.proposals.some(id => included.has(id)));
+  const specifications = new Map(plan.coverage?.requirements.map(r => [r.id, r]));
+  const openGroups = new Map<string, typeof risks>();
+  for (const risk of risks) {
+    if (existing.has(risk.id) || risk.proposals.length) continue;
+    const family = riskFamilies[specifications.get(risk.id)?.kind ?? ""] ?? "Outros riscos";
+    const group = openGroups.get(family) ?? [];
+    group.push(risk);
+    openGroups.set(family, group);
+  }
   const percentage = (count:number) => risks.length ? Math.round(100 * count / risks.length) + "%" : "Indisponível";
   const policy = evaluation.data.policy_context?.policy.tags;
   function selectGroup(ids: string[]) {
@@ -103,8 +120,17 @@ export function MonitoringPlan({
         </div>
         <p className={styles.planBoundary}>A projeção inclui a cobertura existente e todos os riscos com proposta testada. A cobertura final depende de uma nova medição após a implantação.</p>
       </header>
-      {risks.length > 0 && <details className={styles.planCard}><summary>Riscos da jornada · {risks.length - demonstrable.length} ainda sem cobertura demonstrada</summary>
-        {risks.map(r => <p key={r.id}><strong>{r.title}</strong> {r.role} · {existing.has(r.id) ? "Monitor existente" : r.proposals.length ? "Cobertura projetada pelo plano" : "Em investigação"}</p>)}</details>}
+      {openGroups.size > 0 && <details className={styles.planCard}>
+        <summary>Riscos em aberto ({risks.length - demonstrable.length})</summary>
+        <p>O AIRE investiga estes riscos. Abra uma família para ver o que falta comprovar.</p>
+        {Array.from(openGroups, ([family, group]) => <details key={family}>
+          <summary>{family} ({group.length})</summary>
+          {group.map(r => <div key={r.id}>
+            <h5>{r.title}{r.role ? ` · ${r.role}` : ""}</h5>
+            <p>{specifications.get(r.id)?.acceptance || specifications.get(r.id)?.reason || "Aguardando evidência de detecção."}</p>
+          </div>)}
+        </details>)}
+      </details>}
       {plan.source_window?.status === "invalid_evidence" && <aside className={styles.planCard} role="status"><p>{plan.source_window.reason}</p></aside>}
       {plan.experiments?.cases?.length && !plan.source_window ? <MonitoringExperimentsPanel evidence={plan.experiments} /> : null}
       <div className={styles.planSectionHeading}><h4>Já atende</h4></div>
@@ -174,7 +200,7 @@ export function MonitoringPlan({
           <p>
             {assessment ? <>Com todas as propostas, há evidência de teste para {demonstrable.length} dos {risks.length} riscos. Restam {risks.length - demonstrable.length} em investigação.</> : plan.source_window ? "Cobertura da nova versão em validação." : <>{plan.coverage.summary.identified} necessidades de detecção inferidas do manifesto. {" "}{plan.coverage.summary.validated_in_replay} com condição satisfeita em replay no Lab; {" "}{plan.coverage.summary.investigating} ainda sem detecção comprovada.</>}
           </p>
-          <p>A jornada ainda não tem cobertura completa demonstrada. As pendências de investigação ficam com o AIRE; somente mudanças com evidência de detecção aparecem para decisão.</p>
+
           <p>{plan.coverage.calibration.reason}</p>
           {Object.entries(plan.coverage.calibration.signals || {}).map(([signal, fit]) => (
             <p key={signal}>
@@ -182,7 +208,7 @@ export function MonitoringPlan({
               {fit.status !== "insufficient_evidence" && ` ${fit.false_positive_windows?.length || 0} janelas de controle que cruzaram o limite; ${fit.missed_incident_windows?.length || 0} janelas de incidente que não cruzaram o limite.`}
             </p>
           ))}
-          <details>
+          {!assessment && <details>
             <summary>O que falta demonstrar</summary>
             {plan.coverage.requirements.filter(r => assessment ? !demonstrable.some(d => d.id === r.id) : r.status === "investigating").map(r => (
               <div key={r.id}><h5>{r.title}</h5><p>{r.reason}</p>
@@ -190,7 +216,7 @@ export function MonitoringPlan({
               </div>
             ))}
             <p>{plan.coverage.limitation}</p>
-          </details>
+          </details>}
         </details>
       )}
       {!!plan.gaps.length && <details className={styles.planCard}><summary>Outras investigações em andamento ({plan.gaps.length})</summary>{plan.gaps.map(g => <p key={g}>{g}</p>)}</details>}
